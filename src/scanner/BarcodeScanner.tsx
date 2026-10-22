@@ -5,6 +5,7 @@ import {
   inventoryErrorMessage,
   type BarcodeMatch,
 } from '../inventory/api'
+import { startBarcodeCamera } from './camera'
 import { barcodeVariants, cameraError, normalizeBarcode } from './codes'
 
 export function BarcodeScanner({
@@ -43,12 +44,15 @@ export function BarcodeScanner({
   useEffect(() => {
     alive.current = true
     const sessionGeneration = generation
+    startRef.current()
     function suspend() {
       generation.current++
       cleanup.current()
       cleanup.current = () => {}
       setRunning(false)
-      setMessage('Fotocamera arrestata. Premi Avvia fotocamera per riprendere.')
+      setMessage(
+        'Fotocamera arrestata. Premi Riprendi fotocamera per riprendere.',
+      )
     }
     function visibility() {
       if (document.hidden) suspend()
@@ -106,78 +110,30 @@ export function BarcodeScanner({
     }
   }
 
-  async function start() {
+  function start() {
     stop()
-    const token = generation.current
+    if (!video.current || document.hidden) return
     setRunning(true)
-    try {
-      if (!navigator.mediaDevices?.getUserMedia)
-        throw new Error('Camera unavailable')
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-      })
-      if (token !== generation.current || !alive.current) {
-        stream.getTracks().forEach((t) => t.stop())
-        return
-      }
-      cleanup.current = () => {
-        stream.getTracks().forEach((t) => t.stop())
-        if (video.current) video.current.srcObject = null
-      }
-      const [{ BrowserMultiFormatReader }, { BarcodeFormat, DecodeHintType }] =
-        await Promise.all([import('@zxing/browser'), import('@zxing/library')])
-      if (token !== generation.current || !alive.current) return
-      const reader = new BrowserMultiFormatReader(
-        new Map([
-          [
-            DecodeHintType.POSSIBLE_FORMATS,
-            [
-              BarcodeFormat.EAN_8,
-              BarcodeFormat.EAN_13,
-              BarcodeFormat.UPC_A,
-              BarcodeFormat.ITF,
-            ],
-          ],
-        ]),
-      )
-      const controls = await reader.decodeFromStream(
-        stream,
-        video.current!,
-        (result) => {
-          if (result && alive.current && token === generation.current) {
-            if (
-              result.getBarcodeFormat() === BarcodeFormat.ITF &&
-              result.getText().length !== 14
-            )
-              return
-            void recognize(result.getText())
-          }
-        },
-      )
-      if (token !== generation.current || !alive.current) {
-        controls.stop()
-        return
-      }
-      const release = cleanup.current
-      cleanup.current = () => {
-        controls.stop()
-        release()
-      }
-      setMessage(
-        'Fotocamera attiva. Inquadra un codice. Se non viene letto, allontana leggermente o inserisci le cifre a mano.',
-      )
-    } catch (error) {
-      if (alive.current && token === generation.current) {
-        stop()
-        setMessage(cameraError(error))
-      }
-    }
+    setMessage('Avvio della fotocamera…')
+    cleanup.current = startBarcodeCamera(
+      video.current,
+      (raw) => void recognizeRef.current(raw),
+      (error) => {
+        if (alive.current) {
+          setRunning(false)
+          setMessage(cameraError(error))
+        }
+      },
+      () => {
+        if (alive.current)
+          setMessage('Fotocamera attiva. Inquadra un codice alla volta.')
+      },
+    )
   }
+  const recognizeRef = useRef(recognize)
+  recognizeRef.current = recognize
+  const startRef = useRef(start)
+  startRef.current = start
 
   function next() {
     locked.current = false
@@ -196,7 +152,7 @@ export function BarcodeScanner({
       if (!alive.current) return
       await onAdded()
       if (!alive.current) return
-      setResolved(false)
+      next()
       setMessage(
         result.created
           ? 'Prodotto registrato con disponibilità da verificare. Puoi leggere il prossimo codice.'
@@ -226,7 +182,7 @@ export function BarcodeScanner({
       <div className="scanner-controls">
         {!running ? (
           <button type="button" onClick={() => void start()}>
-            Avvia fotocamera
+            Riprendi fotocamera
           </button>
         ) : (
           <button type="button" onClick={stop}>

@@ -14,15 +14,15 @@ export function HomeProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const initialized = useRef(false)
   const sequence = useRef(0)
   const mounted = useRef(false)
   const activeRef = useRef<string | null>(null)
   const refresh = useCallback(
     async (preferredId?: string) => {
       const request = ++sequence.current
-      // Nasconde i dati precedenti finché il database non riconferma l'accesso.
-      setLoading(true)
-      setError('')
+      // Solo il primo caricamento blocca la UI; le verifiche restano fail-closed su errore.
+      if (!initialized.current) setLoading(true)
       try {
         const { data, error } = await supabase!
           .from('home_members')
@@ -56,6 +56,8 @@ export function HomeProvider({ children }: { children: ReactNode }) {
           setNotice(
             'La casa selezionata non è più accessibile. Scegli una delle case disponibili o creane una.',
           )
+        setError('')
+        initialized.current = true
         setHomes(next)
         setActiveId(chosen?.id ?? null)
         activeRef.current = chosen?.id ?? null
@@ -65,6 +67,7 @@ export function HomeProvider({ children }: { children: ReactNode }) {
         if (request === sequence.current && mounted.current) {
           setHomes([])
           setActiveId(null)
+          activeRef.current = null
           setError(
             'Impossibile verificare gli accessi. Controlla la connessione e riprova. I dati precedenti sono stati nascosti.',
           )
@@ -84,7 +87,6 @@ export function HomeProvider({ children }: { children: ReactNode }) {
     const visibility = () => {
       if (document.visibilityState === 'hidden') {
         ++sequence.current
-        setLoading(true)
       } else void refresh()
     }
     const interval = window.setInterval(check, 30_000)

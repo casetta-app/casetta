@@ -17,7 +17,11 @@ export function cameraError(error: unknown): string {
   const name = error instanceof Error ? error.name : ''
   if (name === 'NotAllowedError' || name === 'SecurityError')
     return 'Accesso alla fotocamera negato. Abilitalo nelle impostazioni oppure inserisci il codice a mano.'
-  if (name === 'NotFoundError')
+  if (name === 'NotReadableError')
+    return 'Fotocamera occupata da un’altra app. Chiudila e riprova, oppure inserisci il codice a mano.'
+  if (name === 'NotSupportedError')
+    return 'Fotocamera non supportata: usa HTTPS e un browser compatibile oppure inserisci il codice a mano.'
+  if (name === 'NotFoundError' || name === 'OverconstrainedError')
     return 'Nessuna fotocamera disponibile. Inserisci il codice a mano.'
   return 'Fotocamera non disponibile. Riprova oppure inserisci il codice a mano.'
 }

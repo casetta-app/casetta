@@ -39,7 +39,7 @@ class Query {
   async maybeSingle() { return { data: this.rows()[0] || null, error }; }
   matches(row) { return this.filters.every(([kind, key, value]) => kind === 'in' ? value.includes(row[key]) : kind === 'ilike' ? String(row[key] || '').toLowerCase().includes(value) : row[key] === value); }
   rows() {
-    if (this.table === 'home_members') return homes.filter(h => h.id === 'home-a' || h.id === 'home-b').map(h => ({ home_id: h.id, user_id: 'user-a', role: window.__role || 'editor', relationship: 'resident', revoked_at: null, joined_at: '2026-01-01', homes: h }));
+    if (this.table === 'home_members') return homes.filter(h => !(window.__revoked || []).includes(h.id)).map(h => ({ home_id: h.id, user_id: 'user-a', role: window.__role || 'editor', relationship: 'resident', revoked_at: null, joined_at: '2026-01-01', homes: h }));
     if (this.table === 'home_products') {
       const hps = db.homeProducts.filter(this.matches.bind(this));
       if (this.filters.some(f => f[0] === 'in')) return hps.map(hp => ({ id: hp.id, format_id: hp.format_id }));
@@ -66,7 +66,11 @@ class Query {
     }
     return null;
   }
-  then(resolve, reject) { return Promise.resolve({ data: this.rows(), error }).then(resolve, reject); }
+  then(resolve, reject) {
+    const result = () => ({ data: this.rows(), error: this.table === 'home_members' && window.__homeFailure ? {message: 'offline'} : null });
+    if (this.table === 'home_members' && window.__holdHomes) return new Promise(done => { window.__releaseHomes = () => done(result()) }).then(resolve, reject);
+    return Promise.resolve(result()).then(resolve, reject);
+  }
 }
 const session = { user: { id: 'user-a', email: 'person@example.invalid' }, access_token: 'mock', refresh_token: 'mock', expires_at: 9999999999, token_type: 'bearer' };
 export const supabase = {
@@ -149,7 +153,7 @@ async function openOtherActions(card) {
       if (url.pathname.includes('@zxing_browser'))
         return route.fulfill({
           contentType: 'application/javascript',
-          body: `export class BrowserMultiFormatReader { async decodeFromStream(stream, video, callback) { window.__decode = (text) => callback({getText: () => text, getBarcodeFormat: () => -1}); return { stop() { window.__decoderStops = (window.__decoderStops || 0) + 1 } } } }`,
+          body: `export class BrowserMultiFormatReader { scan(video, callback) { window.__decode = (text) => callback({getText: () => text, getBarcodeFormat: () => -1}); return { stop() { window.__decoderStops = (window.__decoderStops || 0) + 1 } } } }`,
         })
       if (url.pathname.endsWith('/src/lib/supabase.ts'))
         return route.fulfill({
@@ -160,6 +164,32 @@ async function openOtherActions(card) {
     })
     await page.addInitScript(() => {
       window.__role = 'editor'
+      const originalInterval = window.setInterval
+      window.setInterval = (callback, ms, ...args) => {
+        if (ms === 30000) window.__checkHomes = callback
+        return originalInterval(callback, ms, ...args)
+      }
+      HTMLMediaElement.prototype.play = async function () {
+        window.__videoPlays = (window.__videoPlays || 0) + 1
+      }
+      HTMLMediaElement.prototype.pause = function () {}
+      Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', {
+        configurable: true,
+        get() {
+          return this.__stream
+        },
+        set(value) {
+          this.__stream = value
+        },
+      })
+      Object.defineProperty(navigator, 'mediaDevices', {
+        configurable: true,
+        value: {
+          getUserMedia: async () => {
+            throw new DOMException('Denied', 'NotAllowedError')
+          },
+        },
+      })
     })
     await page.goto(`${base}#/scorte`)
     await page.getByRole('heading', { name: 'Scorte', exact: true }).waitFor()
@@ -193,7 +223,6 @@ async function openOtherActions(card) {
         },
       })
     })
-    await page.getByRole('button', { name: 'Avvia fotocamera' }).click()
     await page.getByText(/Accesso alla fotocamera negato/).waitFor()
     await page.getByLabel('Barcode manuale').fill('4006381333931')
     await page
@@ -214,7 +243,6 @@ async function openOtherActions(card) {
       .click()
 
     await page.locator('.add-product-button').click()
-    await page.getByRole('button', { name: 'Scansiona', exact: true }).click()
     await page.evaluate(() => {
       navigator.mediaDevices.getUserMedia = async () => ({
         getTracks: () => [
@@ -240,8 +268,32 @@ async function openOtherActions(card) {
         },
       ]
     })
-    await page.getByRole('button', { name: 'Avvia fotocamera' }).click()
+    await page.getByRole('button', { name: 'Scansiona', exact: true }).click()
     await page.waitForFunction(() => Boolean(window.__decode))
+    await page.evaluate(() => {
+      window.__trackStopsBeforeRefresh = window.__trackStops || 0
+      window.__stockIdentity = document.querySelector('.stock-page')
+      window.__holdHomes = true
+      window.__checkHomes()
+    })
+    await page.waitForFunction(() => Boolean(window.__releaseHomes))
+    assert.equal(await page.locator('.scanner-panel').isVisible(), true)
+    assert.ok(
+      await page.evaluate(
+        () =>
+          document.querySelector('.stock-page') === window.__stockIdentity &&
+          (window.__trackStops || 0) === window.__trackStopsBeforeRefresh,
+      ),
+    )
+    await page.evaluate(() => {
+      window.__holdHomes = false
+      window.__releaseHomes()
+    })
+    assert.ok(
+      await page.evaluate(
+        () => document.querySelector('.stock-page') === window.__stockIdentity,
+      ),
+    )
     const beforeScan = await page.evaluate(
       () => window.__inventoryDb.movements.length,
     )
@@ -273,9 +325,7 @@ async function openOtherActions(card) {
       await page.evaluate(() => window.__inventoryDb.movements.length),
       beforeScan,
     )
-    await page
-      .getByRole('button', { name: 'Prossimo codice', exact: true })
-      .click()
+    await page.waitForTimeout(1300)
     await page.evaluate(() => window.__decode('4006381333931'))
     await page.getByText(/Codice già letto in questa sessione/).waitFor()
     await page.evaluate(() => window.dispatchEvent(new Event('pagehide')))
@@ -284,7 +334,7 @@ async function openOtherActions(card) {
         () => window.__trackStops > 0 && window.__decoderStops > 0,
       ),
     )
-    await page.getByRole('button', { name: 'Avvia fotocamera' }).click()
+    await page.getByRole('button', { name: 'Riprendi fotocamera' }).click()
     await page.getByText(/Fotocamera attiva/).waitFor()
     const beforeHomeChange = await page.evaluate(() => window.__trackStops)
     await page.getByLabel('Cambia abitazione').selectOption('home-b')
@@ -479,6 +529,43 @@ async function openOtherActions(card) {
     await page.getByRole('heading', { name: 'Scorte', exact: true }).waitFor()
     console.log(
       'PASS: UI owner/editor, form richiudibile, campi essenziali e facoltativi, aggiunta senza barcode e quantità, catalogo, movimenti, cambio casa, layout mobile/desktop e link Oggi → Scorte',
+    )
+    await page.evaluate(() => {
+      window.__role = 'viewer'
+      window.__checkHomes()
+    })
+    await page.locator('.read-only-note').waitFor()
+    assert.equal(await page.locator('.add-product-button').count(), 0)
+    await page.evaluate(() => {
+      window.__revoked = ['home-b']
+      window.__checkHomes()
+    })
+    await page.getByRole('heading', { name: 'Pasta', exact: true }).waitFor()
+    assert.equal(
+      await page.getByRole('heading', { name: 'Sale', exact: true }).count(),
+      0,
+    )
+    await page.evaluate(() => {
+      window.__homeFailure = true
+      window.__checkHomes()
+    })
+    await page.getByText(/Impossibile verificare gli accessi/).waitFor()
+    assert.equal(await page.locator('.stock-page').count(), 0)
+    await page.evaluate(() => {
+      window.__homeFailure = false
+    })
+    await page.getByRole('button', { name: 'Riprova', exact: true }).click()
+    await page.getByRole('heading', { name: 'Pasta', exact: true }).waitFor()
+    await page.evaluate(() => {
+      window.__revoked = ['home-a', 'home-b']
+      window.__checkHomes()
+    })
+    await page
+      .getByRole('heading', { name: 'Benvenuto a casa', exact: true })
+      .waitFor()
+    assert.equal(await page.locator('.stock-page').count(), 0)
+    console.log(
+      'PASS: rivalidazione periodica mantiene DOM e scanner; downgrade ruolo, revoca e errore rete rimuovono accesso',
     )
     await page.close()
 
