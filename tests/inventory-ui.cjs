@@ -45,6 +45,7 @@ class Query {
       if (this.filters.some(f => f[0] === 'in')) return hps.map(hp => ({ id: hp.id, format_id: hp.format_id }));
       return hps.map(hp => { const format = db.formats.find(f => f.id === hp.format_id); const product = db.products.find(p => p.id === hp.productId); return { id: hp.id, format_id: hp.format_id, alias: hp.alias, product_formats: { id: format.id, label: format.label, kind: format.kind, size_unit: format.size_unit, products: { id: product.id, name: product.name, brand: product.brand, category: product.category } }, stock_entries: hp.entries }; });
     }
+    if (this.table === 'product_formats') return (window.__barcodeMatches || []).filter(this.matches.bind(this));
     if (this.table === 'products') return db.products.filter(this.matches.bind(this)).map(p => ({ id: p.id, name: p.name, brand: p.brand, category: p.category, scope_home_id: p.scope_home_id, product_formats: p.formats }));
     if (this.table === 'storage_locations') return db.locations.filter(this.matches.bind(this));
     return [];
@@ -145,6 +146,11 @@ async function openOtherActions(card) {
         externalRequests++
         return route.abort()
       }
+      if (url.pathname.includes('@zxing_browser'))
+        return route.fulfill({
+          contentType: 'application/javascript',
+          body: `export class BrowserMultiFormatReader { async decodeFromStream(stream, video, callback) { window.__decode = (text) => callback({getText: () => text, getBarcodeFormat: () => -1}); return { stop() { window.__decoderStops = (window.__decoderStops || 0) + 1 } } } }`,
+        })
       if (url.pathname.endsWith('/src/lib/supabase.ts'))
         return route.fulfill({
           contentType: 'application/javascript',
@@ -175,6 +181,122 @@ async function openOtherActions(card) {
         .evaluate((bar) => bar.getBoundingClientRect().height < 130),
     )
     assert.match(await page.locator('.stock-card').innerText(), /Dispensa/)
+    await page.locator('.add-product-button').click()
+    await page.getByRole('button', { name: 'Scansiona', exact: true }).click()
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, 'mediaDevices', {
+        configurable: true,
+        value: {
+          getUserMedia: async () => {
+            throw new DOMException('Denied', 'NotAllowedError')
+          },
+        },
+      })
+    })
+    await page.getByRole('button', { name: 'Avvia fotocamera' }).click()
+    await page.getByText(/Accesso alla fotocamera negato/).waitFor()
+    await page.getByLabel('Barcode manuale').fill('4006381333931')
+    await page
+      .getByRole('button', { name: 'Cerca codice', exact: true })
+      .click()
+    await page
+      .getByRole('button', { name: 'Inserisci prodotto con questo barcode' })
+      .click()
+    assert.equal(
+      await page.getByLabel(/Codice a barre/).inputValue(),
+      '4006381333931',
+    )
+    assert.equal(await page.getByLabel(/Nome/).inputValue(), '')
+    await page.getByLabel(/Codice a barre/).fill('')
+    await page
+      .locator('.add-panel')
+      .getByRole('button', { name: 'Chiudi', exact: true })
+      .click()
+
+    await page.locator('.add-product-button').click()
+    await page.getByRole('button', { name: 'Scansiona', exact: true }).click()
+    await page.evaluate(() => {
+      navigator.mediaDevices.getUserMedia = async () => ({
+        getTracks: () => [
+          {
+            stop: () => {
+              window.__trackStops = (window.__trackStops || 0) + 1
+            },
+          },
+        ],
+      })
+      window.__barcodeMatches = [
+        {
+          id: 'pasta-format',
+          label: '500 g',
+          barcode: '4006381333931',
+          products: { name: 'Pasta', brand: null },
+        },
+        {
+          id: 'other-format',
+          label: 'Altro formato',
+          barcode: '4006381333931',
+          products: { name: 'Altro prodotto', brand: null },
+        },
+      ]
+    })
+    await page.getByRole('button', { name: 'Avvia fotocamera' }).click()
+    await page.waitForFunction(() => Boolean(window.__decode))
+    const beforeScan = await page.evaluate(
+      () => window.__inventoryDb.movements.length,
+    )
+    await page.evaluate(() => {
+      window.__decode('4006381333931')
+      window.__decode('4006381333931')
+    })
+    await page.waitForFunction(
+      () => document.querySelectorAll('.scanner-match').length === 2,
+    )
+    assert.equal(
+      await page
+        .getByRole('button', { name: 'Conferma aggiunta', exact: true })
+        .count(),
+      2,
+    )
+    assert.equal(
+      await page.evaluate(() => window.__inventoryDb.movements.length),
+      beforeScan,
+    )
+    await page
+      .getByRole('button', { name: 'Conferma aggiunta', exact: true })
+      .first()
+      .click()
+    await page
+      .getByText(/Formato già nelle scorte: quantità invariata/)
+      .waitFor()
+    assert.equal(
+      await page.evaluate(() => window.__inventoryDb.movements.length),
+      beforeScan,
+    )
+    await page
+      .getByRole('button', { name: 'Prossimo codice', exact: true })
+      .click()
+    await page.evaluate(() => window.__decode('4006381333931'))
+    await page.getByText(/Codice già letto in questa sessione/).waitFor()
+    await page.evaluate(() => window.dispatchEvent(new Event('pagehide')))
+    assert.ok(
+      await page.evaluate(
+        () => window.__trackStops > 0 && window.__decoderStops > 0,
+      ),
+    )
+    await page.getByRole('button', { name: 'Avvia fotocamera' }).click()
+    await page.getByText(/Fotocamera attiva/).waitFor()
+    const beforeHomeChange = await page.evaluate(() => window.__trackStops)
+    await page.getByLabel('Cambia abitazione').selectOption('home-b')
+    await page.getByRole('heading', { name: 'Sale', exact: true }).waitFor()
+    assert.ok(
+      await page.evaluate(
+        (previous) => window.__trackStops > previous,
+        beforeHomeChange,
+      ),
+    )
+    await page.getByLabel('Cambia abitazione').selectOption('home-a')
+    await page.getByRole('heading', { name: 'Pasta', exact: true }).waitFor()
 
     assert.equal(
       await page

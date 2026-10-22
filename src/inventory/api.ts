@@ -413,3 +413,24 @@ export function inventoryErrorMessage(error: unknown): string {
     return 'Connessione interrotta. Controlla le scorte prima di riprovare: la richiesta potrebbe essere arrivata al database.'
   return `Operazione non riuscita: ${error.message}`
 }
+
+export type BarcodeMatch = {
+  id: string
+  label: string
+  products: { name: string; brand: string | null }
+}
+
+export async function findBarcodeFormats(
+  homeId: string,
+  codes: string[],
+): Promise<BarcodeMatch[]> {
+  const { data, error } = await client()
+    .from('product_formats')
+    .select('id, label, products!inner(name, brand, scope_home_id)')
+    .in('barcode', codes)
+    .or(`scope_home_id.is.null,scope_home_id.eq.${homeId}`, {
+      referencedTable: 'products',
+    })
+  raise(error)
+  return (data ?? []) as unknown as BarcodeMatch[]
+}

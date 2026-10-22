@@ -1,3 +1,4 @@
+import { BarcodeScanner } from '../scanner/BarcodeScanner'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useHomes } from '../homes/HomeContext'
 import { Icon } from '../components/Icon'
@@ -124,6 +125,8 @@ export function StockPage() {
   const [category, setCategory] = useState<InventoryCategory | 'all'>('all')
   const [availability, setAvailability] = useState<AvailabilityFilter>('all')
   const [showAdd, setShowAdd] = useState(false)
+  const [showScanner, setShowScanner] = useState(false)
+  const productDetails = useRef<HTMLDetailsElement>(null)
   const [catalogQuery, setCatalogQuery] = useState('')
   const [catalog, setCatalog] = useState<CatalogProduct[]>([])
   const [catalogBusy, setCatalogBusy] = useState(false)
@@ -197,6 +200,7 @@ export function StockPage() {
   useEffect(() => {
     setEditor(null)
     setShowAdd(false)
+    setShowScanner(false)
     setNotice('')
     void reload()
     return () => {
@@ -669,6 +673,32 @@ export function StockPage() {
             </button>
           </div>
 
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setShowScanner(true)}
+          >
+            Scansiona
+          </button>
+          {showScanner && (
+            <BarcodeScanner
+              key={home.id}
+              homeId={home.id}
+              onClose={() => setShowScanner(false)}
+              onAdded={reload}
+              onManual={(code) => {
+                setBarcode(code)
+                setNewName('')
+                setNewBrand('')
+                setFormatLabel('')
+                setSizeQuantity('')
+                setSizeUnit('')
+                setNewAvailability('unknown')
+                setShowScanner(false)
+                if (productDetails.current) productDetails.current.open = true
+              }}
+            />
+          )}
           <label className="field-label">
             Cerca nel catalogo
             <input
@@ -782,7 +812,10 @@ export function StockPage() {
                 </select>
               </label>
             </div>
-            <details className="additional-product-details">
+            <details
+              ref={productDetails}
+              className="additional-product-details"
+            >
               <summary>
                 Altri dettagli <span>Facoltativi</span>
               </summary>
