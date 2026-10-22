@@ -9,6 +9,7 @@ import { HomeGate } from './homes/HomeGate'
 import { ManagementPage } from './pages/ManagementPage'
 import { TodayPage } from './pages/TodayPage'
 import { ComingSoonPage } from './pages/ComingSoonPage'
+import { StockPage } from './pages/StockPage'
 import './styles.css'
 
 async function start() {
@@ -35,7 +36,7 @@ async function start() {
                 path="scorte"
                 element={
                   <HomeGate>
-                    <ComingSoonPage area="Scorte" />
+                    <StockPage />
                   </HomeGate>
                 }
               />

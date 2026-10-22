@@ -11,6 +11,8 @@ import re
 import sys
 sys.dont_write_bytecode = True
 from concurrency import run_lifecycle_races
+from inventory_concurrency import run_inventory_races
+from addition_concurrency import run_addition_races
 
 ROOT = Path(__file__).resolve().parents[1]
 BIN = Path(shutil.which('pg_ctl') or '/opt/homebrew/bin/pg_ctl').parent
@@ -36,12 +38,38 @@ with tempfile.TemporaryDirectory(prefix='casetta-m0b-') as directory:
         print('PostgreSQL ' + sql('show server_version;').stdout.strip(), flush=True)
         total_checks = 0
         sql((ROOT / 'tests/local-auth-shim.sql').read_text())
-        for migration in sorted((ROOT / 'supabase/migrations').glob('*.sql')):
+        migrations = sorted((ROOT / 'supabase/migrations').glob('*.sql'))
+        sql(migrations[0].read_text())
+        # Simula un'installazione M0 con account/casa già esistenti PRIMA di M1.
+        preserved_user = str(uuid.uuid4())
+        sql(f"insert into auth.users values ('{preserved_user}');")
+        preserved_home = sql(f"begin; set local role authenticated; select set_config('request.jwt.claim.sub','{preserved_user}',true); select public.create_home('Fixture pre-M1',gen_random_uuid()); commit;").stdout.splitlines()[1]
+        fingerprint = "select jsonb_build_object('users',(select jsonb_agg(to_jsonb(u) order by id) from auth.users u),'profiles',(select jsonb_agg(to_jsonb(p) order by user_id) from public.profiles p),'homes',(select jsonb_agg(to_jsonb(h) order by id) from public.homes h),'members',(select jsonb_agg(to_jsonb(m) order by home_id,user_id) from public.home_members m));"
+        baseline = sql(fingerprint).stdout
+        for migration in migrations[1:]:
+            if 'm1b1' in migration.name:
+                legacy_home = sql(f"begin; set local role authenticated; select set_config('request.jwt.claim.sub','{preserved_user}',true); select public.create_home('Fixture M1-A',gen_random_uuid()); commit;").stdout.splitlines()[1]
+                legacy_product = sql(f"begin; set local role authenticated; select set_config('request.jwt.claim.sub','{preserved_user}',true); insert into public.products(scope_home_id,name) values ('{legacy_home}','Legacy') returning id; commit;").stdout.splitlines()[1]
+                legacy_format = sql(f"begin; set local role authenticated; select set_config('request.jwt.claim.sub','{preserved_user}',true); insert into public.product_formats(product_id,label,kind) values ('{legacy_product}','Pacco','packaged') returning id; commit;").stdout.splitlines()[1]
+                legacy_hp = sql(f"begin; set local role authenticated; select set_config('request.jwt.claim.sub','{preserved_user}',true); insert into public.home_products(home_id,format_id) values ('{legacy_home}','{legacy_format}') returning id; commit;").stdout.splitlines()[1]
+                sql(f"begin; set local role authenticated; select set_config('request.jwt.claim.sub','{preserved_user}',true); select public.record_stock_movement('{legacy_home}',gen_random_uuid(),'correction',p_home_product_id=>'{legacy_hp}',p_state=>'{{\"mode\":\"unknown\",\"certainty\":\"unknown\"}}'); commit;")
+                inventory_fingerprint = "select jsonb_build_array(" + ','.join(f"(select jsonb_agg(to_jsonb(t) order by id) from public.{table} t)" for table in ['products','product_formats','home_products','stock_entries','stock_movements','storage_locations']) + ");"
+                legacy_before = sql(inventory_fingerprint).stdout
             sql(migration.read_text())
-        for test_file in ['database.sql', 'lifecycle.sql']:
+            if 'm1b1' in migration.name:
+                assert sql(inventory_fingerprint).stdout == legacy_before
+                print('PASS: M1-B.1 preserva esattamente catalogo, scorte e movimenti M1-A', flush=True)
+                sql(f"begin; set local role authenticated; select set_config('request.jwt.claim.sub','{preserved_user}',true); select public.delete_home('{legacy_home}'); commit;")
+        assert sql(fingerprint).stdout == baseline
+        print('PASS: M1 preserva integralmente righe M0 già esistenti', flush=True)
+        assert sql('select (select count(*) from public.products) + (select count(*) from public.storage_locations) + (select count(*) from public.stock_entries);').stdout.strip() == '0'
+        print('PASS: M1 non crea catalogo, posizioni o scorte dimostrative', flush=True)
+        sql(f"begin; set local role authenticated; select set_config('request.jwt.claim.sub','{preserved_user}',true); select public.delete_home('{preserved_home}'); reset role; delete from auth.users where id='{preserved_user}'; commit;")
+        for test_file in ['database.sql', 'lifecycle.sql', 'inventory.sql', 'atomic-addition.sql']:
             result = sql((ROOT / 'tests' / test_file).read_text())
             total_checks += result.stderr.count('PASS:')
-            print(result.stderr.strip(), flush=True)
+            if '--verbose' in sys.argv: print(result.stderr.strip(), flush=True)
+            print(f'PASS: {test_file}: {result.stderr.count("PASS:")} controlli SQL', flush=True)
         print(f'SUMMARY: {total_checks} controlli SQL PostgreSQL superati', flush=True)
         actor, second = str(uuid.uuid4()), str(uuid.uuid4())
         key = str(uuid.uuid4())
@@ -76,6 +104,9 @@ with tempfile.TemporaryDirectory(prefix='casetta-m0b-') as directory:
         assert sql(f"select count(*) from public.home_members where home_id = '{home}' and role = 'owner' and revoked_at is null;").stdout.strip() == '1'
         print('PASS: demozioni concorrenti preservano almeno un owner')
         lifecycle_races = run_lifecycle_races(sql, command, env)
-        print(f'SUMMARY: {lifecycle_races + 3} scenari concorrenti PostgreSQL superati')
+        inventory_races = run_inventory_races(sql, command, env)
+        addition_races = run_addition_races(sql, command, env)
+        print(f'SUMMARY: {addition_races} scenari concorrenti inserimento atomico superati')
+        print(f'SUMMARY: {lifecycle_races + 3} scenari concorrenti M0 e {inventory_races} scenari concorrenti inventario superati')
     finally:
         subprocess.run([str(BIN / 'pg_ctl'), '-D', str(data), '-m', 'immediate', 'stop'], check=True, capture_output=True)

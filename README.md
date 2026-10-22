@@ -1,6 +1,6 @@
-# Casetta — M0-B / revisioni M0-B.1 e M0-B.2
+# Casetta — M1-B.1 (inserimento atomico)
 
-Account personali e abitazioni indipendenti sopra la shell M0-A esistente. React, TypeScript strict, Vite e HashRouter, base `/casetta/`. Oggi mantiene lo stato vuoto; Scorte e Spesa restano in preparazione. Gestione permette consultazione delle case e creazione. Inventario, scanner, acquisti e inviti non sono implementati.
+Account personali e abitazioni indipendenti sopra la shell M0-A esistente. React, TypeScript strict, Vite e HashRouter, base `/casetta/`. Oggi mantiene lo stato vuoto; Scorte ora consulta e aggiorna l’inventario ibrido della casa attiva. Spesa, scanner e carrello restano in preparazione. Gestione permette consultazione delle case e creazione. Secondo lo stato comunicato dall’utente, M1-A è applicata al progetto Supabase Casetta; questa UI usa schema, RLS e RPC esistenti.
 
 ## Avvio
 
@@ -56,6 +56,20 @@ Il ritorno email arriva a `/casetta/?code=...`, servibile da GitHub Pages. Prima
 Il link PKCE deve aprirsi nello **stesso browser e storage** da cui è partita la richiesta. Safari, browser dentro le app email e PWA installata possono avere storage distinti. Un link avviato dalla PWA e aperto in Safari può fallire: richiedere il link dal browser nel quale verrà aperto. Nessun fallback implicito che indebolisca PKCE. Non usare più richieste email simultanee: il verifier dell’ultima richiesta può sostituire quello precedente. Lo storage deve essere disponibile per mantenere sessione e verifier.
 
 Le rotte riservate richiedono sessione. La preferenza dell’ultima casa è separata per user ID e ricontrollata con query RLS; non autorizza accessi. Logout riguarda la sessione sul dispositivo corrente. Il contenuto delle case viene riconvalidato al ritorno in primo piano, al focus, al ritorno online e ogni 30 secondi; durante la verifica è nascosto, in caso di errore è rimosso. La revoca nel database blocca subito le successive query: l’aggiornamento della UI in una scheda già aperta può richiedere fino al prossimo controllo (30 secondi). Il service worker non mette in cache API o dati privati.
+
+## Inserimento atomico M1-B.1
+
+La nuova migrazione 003 prepara `add_inventory_product` e il frontend la usa per prodotto, formato, collegamento e prima disponibilità in un’unica transazione. È da revisionare e applicare prima della pubblicazione del frontend aggiornato; questo incarico non ha applicato SQL remoto. [Contratto, test e limiti M1-B.1](docs/M1-B.1.md).
+
+## Database inventario M1-A
+
+La M0 è già pubblicata e lo schema M0-B.1 contiene utenti e case reali. Non rieseguire la migrazione iniziale. La migrazione additiva `supabase/migrations/202610220002_m1a_hybrid_inventory.sql` definisce sei tabelle: products, product_formats, home_products, storage_locations, stock_entries e stock_movements. Nessun seed o aggiornamento dei dati esistenti.
+
+Il modello separa identità prodotto, formato commerciale e lotto domestico, con quantità numeriche esatte, livelli indicativi, sconosciuti e stime esplicite. Posizioni/scadenze facoltative, confezioni aperte separate, movimenti atomici/idempotenti, RLS e controllo dei ruoli nel DB.
+
+[Architettura, schema, protocollo della RPC, sicurezza e risultati dei test M1-A](docs/M1-A.md). `pnpm test:db` applica M0 e M1 a un cluster temporaneo locale, verifica la conservazione di righe M0 preesistenti, esegue regressioni e nuove prove SQL/concorrenza. Per i messaggi delle singole asserzioni: `python3 tests/run-database.py --verbose`.
+
+La M1-B non modifica migrazioni o database remoto. Le istruzioni e i limiti della UI sono in [docs/M1-B.md](docs/M1-B.md); la M1-A resta documentata in [docs/M1-A.md](docs/M1-A.md).
 
 ## Database e sicurezza
 
@@ -115,4 +129,4 @@ Un lock sincrono impedisce due richieste dalla stessa schermata prima del prossi
 
 ## Struttura
 
-`src/auth` identità e callback; `src/homes` accessi e selezione; `src/lib` client e preferenze; `src/pages` schermate; `src/shell` navigazione; `supabase/migrations` schema versionato; `tests` verifiche locali. L’ambito termina alla M0-B.
+`src/auth` identità e callback; `src/homes` accessi e selezione; `src/inventory` modello e adapter Scorte; `src/lib` client e preferenze; `src/pages` schermate; `src/shell` navigazione; `supabase/migrations` schema versionato; `tests` verifiche locali. La Spesa, lo scanner e gli acquisti restano fuori dalla M1-B.

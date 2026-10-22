@@ -7,6 +7,36 @@ import uuid
 import re
 
 
+def synchronized_race(sql, command, env, actions, isolation):
+    # Il keeper detiene il lock esclusivo; ogni concorrente acquisisce PRIMA
+    # lo snapshot, poi attende un lock condiviso. Si rilascia solo quando
+    # PostgreSQL conferma che TUTTI sono in attesa, senza affidarsi a sleep.
+    gate = secrets.randbelow(1_000_000_000) + 1
+    keeper = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, text=True, env=env)
+    try:
+        keeper.stdin.write(f"select 'ready' from pg_advisory_lock({gate});\n")
+        keeper.stdin.flush()
+        assert keeper.stdout.readline().strip() == 'ready'
+        with ThreadPoolExecutor(max_workers=len(actions)) as pool:
+            futures = [pool.submit(sql, f"\\set VERBOSITY sqlstate\nbegin isolation level {isolation}; set local statement_timeout = '8s'; select count(*) from public.homes; select pg_advisory_xact_lock_shared({gate}); {action} commit;", False) for action in actions]
+            deadline = time.monotonic() + 5
+            while True:
+                waiting = int(sql(f"select count(*) from pg_locks where locktype = 'advisory' and objid = {gate} and not granted;").stdout.strip())
+                if waiting == len(actions):
+                    break
+                if time.monotonic() > deadline or any(f.done() for f in futures):
+                    raise AssertionError('I concorrenti non hanno raggiunto la barriera snapshot')
+                time.sleep(0.01)
+            keeper.communicate(f"select pg_advisory_unlock({gate});\n\\q\n", timeout=5)
+            results = [f.result() for f in futures]
+        return results
+    finally:
+        if keeper.poll() is None:
+            keeper.kill()
+            keeper.communicate(timeout=5)
+
+
 def run_lifecycle_races(sql, command, env):
     def shared(second_role='owner'):
         actor, second = str(uuid.uuid4()), str(uuid.uuid4())
@@ -19,33 +49,7 @@ def run_lifecycle_races(sql, command, env):
         return f"set local role authenticated; select set_config('request.jwt.claim.sub','{user}',true); {action}"
 
     def race(actions, isolation):
-        # Il keeper detiene il lock esclusivo; ogni concorrente acquisisce PRIMA
-        # lo snapshot, poi attende un lock condiviso. Si rilascia solo quando
-        # PostgreSQL conferma che ENTRAMBI sono in attesa, senza affidarsi a sleep.
-        gate = secrets.randbelow(1_000_000_000) + 1
-        keeper = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE, text=True, env=env)
-        try:
-            keeper.stdin.write(f"select 'ready' from pg_advisory_lock({gate});\n")
-            keeper.stdin.flush()
-            assert keeper.stdout.readline().strip() == 'ready'
-            with ThreadPoolExecutor(max_workers=len(actions)) as pool:
-                futures = [pool.submit(sql, f"\\set VERBOSITY sqlstate\nbegin isolation level {isolation}; set local statement_timeout = '8s'; select count(*) from public.homes; select pg_advisory_xact_lock_shared({gate}); {action} commit;", False) for action in actions]
-                deadline = time.monotonic() + 5
-                while True:
-                    waiting = int(sql(f"select count(*) from pg_locks where locktype = 'advisory' and objid = {gate} and not granted;").stdout.strip())
-                    if waiting == len(actions):
-                        break
-                    if time.monotonic() > deadline or any(f.done() for f in futures):
-                        raise AssertionError('I concorrenti non hanno raggiunto la barriera snapshot')
-                    time.sleep(0.01)
-                keeper.communicate(f"select pg_advisory_unlock({gate});\n\\q\n", timeout=5)
-                results = [f.result() for f in futures]
-            return results
-        finally:
-            if keeper.poll() is None:
-                keeper.kill()
-                keeper.communicate(timeout=5)
+        return synchronized_race(sql, command, env, actions, isolation)
 
     def assert_results(results, allowed, success_count=1):
         successes = sum(result.returncode == 0 for result in results)
