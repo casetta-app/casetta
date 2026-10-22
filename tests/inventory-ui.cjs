@@ -3,9 +3,10 @@ const assert = require('node:assert/strict')
 const { chromium } = require('playwright')
 
 const base = 'http://127.0.0.1:5173/casetta/'
+const longHomeName = 'Casa condivisa con un nome volutamente lungo per i test mobile'
 const mock = `
 const homes = [
-  { id: 'home-a', name: 'Casa A' },
+  { id: 'home-a', name: '${longHomeName}' },
   { id: 'home-b', name: 'Casa B' },
 ];
 const db = {
@@ -149,6 +150,8 @@ export const supabase = {
     await page.goto(`${base}#/scorte`)
     await page.getByRole('heading', { name: 'Scorte', exact: true }).waitFor()
     await page.getByRole('heading', { name: 'Pasta', exact: true }).waitFor()
+    assert.equal(await page.locator('.home-active-name').innerText(), longHomeName)
+    assert.equal(await page.locator('.home-role').isVisible(), false)
     assert.match(await page.locator('.stock-card').innerText(), /Dispensa/)
 
     await page.getByRole('button', { name: 'Apri', exact: true }).click()
@@ -172,6 +175,21 @@ export const supabase = {
     )
 
     await page.locator('.add-product-button').click()
+    assert.equal(
+      await page.locator('.additional-product-details').evaluate((node) => node.open),
+      false,
+    )
+    await page.getByLabel(/Nome/).waitFor()
+    await page.locator('.essential-product-fields select').waitFor()
+    assert.equal(await page.getByLabel(/Marca/).isVisible(), false)
+    await page.getByText('Altri dettagli').click()
+    await page.getByLabel(/Marca/).waitFor()
+    await page.getByLabel(/Codice a barre/).waitFor()
+    await page.getByText('Altri dettagli').click()
+    assert.equal(
+      await page.locator('.additional-product-details').evaluate((node) => node.open),
+      false,
+    )
     await page.getByLabel(/Cerca nel catalogo/).fill('Pasta')
     await page.getByText(/Già nelle scorte/).waitFor()
     assert.equal(
@@ -278,8 +296,19 @@ export const supabase = {
       ),
       false,
     )
+    await page.setViewportSize({ width: 1280, height: 900 })
+    assert.equal(await page.locator('.home-role').isVisible(), true)
+    assert.equal(
+      await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
+      false,
+    )
+    await page.goto(`${base}#/oggi`)
+    await page.getByRole('heading', { name: 'Oggi', exact: true }).waitFor()
+    assert.equal(await page.getByText(/non ancora attivati/).count(), 0)
+    await page.getByRole('link', { name: 'Apri le scorte' }).click()
+    await page.getByRole('heading', { name: 'Scorte', exact: true }).waitFor()
     console.log(
-      'PASS: UI owner/editor, aggiunta senza barcode e quantità, catalogo senza duplicato, apertura, correzione stimata, idempotenza rapida, cambio casa e layout iPhone 390×844',
+      'PASS: UI owner/editor, form richiudibile, campi essenziali e facoltativi, aggiunta senza barcode e quantità, catalogo, movimenti, cambio casa, layout mobile/desktop e link Oggi → Scorte',
     )
     await page.close()
 

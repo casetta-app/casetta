@@ -5,6 +5,7 @@ import {
   formatQuantity,
   matchesAvailability,
   newUnknownState,
+  productAvailabilitySummary,
   stateLabel,
   validateQuantity,
   type InventoryProduct,
@@ -104,4 +105,44 @@ test('assenza di righe significa non censito e non quantità zero', () => {
   assert.equal(matchesAvailability(item.entries, 'check'), true)
   assert.equal(matchesAvailability(item.entries, 'empty'), false)
   assert.equal(matchesAvailability(item.entries, 'available'), false)
+})
+
+test('riepilogo prodotto distingue lotti esauriti e disponibili senza sommarli', () => {
+  const empty = entry({
+    id: 'empty',
+    mode: 'count',
+    quantity: '0',
+    unit: 'pack',
+    certainty: 'confirmed',
+  })
+  const available = entry({
+    id: 'available',
+    mode: 'measure',
+    quantity: '750',
+    unit: 'g',
+    certainty: 'confirmed',
+  })
+  assert.deepEqual(productAvailabilitySummary([empty, available]), {
+    label: '1 lotto disponibile · 1 esaurito',
+    tone: 'available',
+  })
+  assert.deepEqual(productAvailabilitySummary([empty]), {
+    label: 'Tutti i lotti esauriti',
+    tone: 'empty',
+  })
+  assert.deepEqual(
+    productAvailabilitySummary([
+      entry({
+        mode: 'count',
+        quantity: '3',
+        unit: 'pack',
+        certainty: 'estimated',
+      }),
+    ]),
+    { label: 'Disponibilità stimata', tone: 'estimated' },
+  )
+  assert.deepEqual(productAvailabilitySummary([entry()]), {
+    label: 'Disponibilità da verificare',
+    tone: 'unknown',
+  })
 })

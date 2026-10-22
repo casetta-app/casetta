@@ -1,4 +1,5 @@
 import { Icon } from '../components/Icon'
+import { Link } from 'react-router-dom'
 
 export function TodayPage() {
   const today = new Intl.DateTimeFormat('it-IT', {
@@ -14,7 +15,10 @@ export function TodayPage() {
             {today.toLocaleUpperCase('it-IT')}
           </p>
           <h1 id="today-title">Oggi</h1>
-          <p className="page-subtitle">Il punto di partenza per la tua casa.</p>
+          <p className="page-subtitle">
+            Un punto semplice per prenderti cura della casa, un giorno alla
+            volta.
+          </p>
         </div>
         <div className="sun-badge">
           <Icon name="sun" size={24} />
@@ -36,13 +40,13 @@ export function TodayPage() {
           <span className="soft-label">UN INIZIO LEGGERO</span>
           <h2>La tua casa è pronta.</h2>
           <p>
-            Non serve inserire tutto quello che possiedi. Casetta prenderà forma
-            insieme ai tuoi prossimi acquisti.
+            Le scorte sono pronte: aggiungi quello che ti serve, quando ti
+            serve. Puoi iniziare da un prodotto e aggiornare la disponibilità in
+            pochi tocchi.
           </p>
-          <p className="empty-note">
-            Questa area è pronta per accogliere la tua casa. Le scorte e la
-            spesa arriveranno nei prossimi passi.
-          </p>
+          <Link className="primary-button today-stock-link" to="/scorte">
+            Apri le scorte
+          </Link>
         </div>
       </div>
 
@@ -52,9 +56,10 @@ export function TodayPage() {
             <Icon name="boxes" />
           </span>
           <div>
-            <h3>Si parte con calma</h3>
+            <h3>Un prodotto alla volta</h3>
             <p>
-              Nessun inventario da compilare, nessun conteggio da indovinare.
+              Cerca nel catalogo o aggiungi un prodotto con la sola
+              disponibilità che conosci.
             </p>
           </div>
         </article>
@@ -63,17 +68,14 @@ export function TodayPage() {
             <Icon name="home" />
           </span>
           <div>
-            <h3>La casa resta tua</h3>
+            <h3>Scorte chiare</h3>
             <p>
-              Persone e abitazioni sono gestite separatamente, con permessi
-              espliciti.
+              Quantità, confezioni e posizioni restano organizzate per la casa
+              selezionata.
             </p>
           </div>
         </article>
       </div>
-      <p className="readiness-line">
-        <span className="status-dot" /> Scorte e acquisti non ancora attivati
-      </p>
     </section>
   )
 }

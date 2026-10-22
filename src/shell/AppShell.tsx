@@ -40,6 +40,9 @@ export function AppShell() {
           </span>
           <span className="home-switcher-copy">
             <span className="eyebrow">ABITAZIONE</span>
+            <span className="home-active-name">
+              {loading ? 'Verifica…' : (activeHome?.name ?? 'Nessuna casa')}
+            </span>
             <select
               aria-label="Abitazione attiva"
               value={loading ? '' : (activeHome?.id ?? '')}
@@ -54,11 +57,16 @@ export function AppShell() {
               {!loading &&
                 homes.map((home) => (
                   <option key={home.id} value={home.id}>
-                    {home.name} · {roleLabels[home.access.role]}
+                    {home.name}
                   </option>
                 ))}
             </select>
           </span>
+          {activeHome && (
+            <span className="home-role">
+              {roleLabels[activeHome.access.role]}
+            </span>
+          )}
         </label>
         <button
           className="setup-mark"

@@ -22,6 +22,7 @@ import {
   newLevelState,
   newMeasureState,
   newUnknownState,
+  productAvailabilitySummary,
   stateLabel,
   unitLabel,
   validateQuantity,
@@ -738,7 +739,7 @@ export function StockPage() {
             }}
           >
             <h3>Nuovo prodotto</h3>
-            <div className="form-grid">
+            <div className="form-grid essential-product-fields">
               <label className="field-label">
                 Nome <span className="required-mark">obbligatorio</span>
                 <input
@@ -748,110 +749,6 @@ export function StockPage() {
                   onChange={(event) => setNewName(event.target.value)}
                   placeholder="Es. Pasta"
                 />
-              </label>
-              <label className="field-label">
-                Marca <span className="optional-mark">facoltativa</span>
-                <input
-                  maxLength={120}
-                  value={newBrand}
-                  onChange={(event) => setNewBrand(event.target.value)}
-                  placeholder="Se la ricordi"
-                />
-              </label>
-              <label className="field-label">
-                Tipo
-                <select
-                  value={newKind}
-                  onChange={(event) => {
-                    const kind = event.target.value as FormatKind
-                    setNewKind(kind)
-                    if (newAvailability === 'count')
-                      setNewUnit(kind === 'packaged' ? 'pack' : 'piece')
-                    else if (kind === 'piece') setNewUnit('piece')
-                    else if (kind === 'packaged') setNewUnit('pack')
-                    else if (newUnit === 'pack' || newUnit === 'piece')
-                      setNewUnit('kg')
-                  }}
-                >
-                  <option value="packaged">Confezionato</option>
-                  <option value="loose">Sfuso</option>
-                  <option value="piece">A pezzo</option>
-                </select>
-              </label>
-              <label className="field-label">
-                Categoria
-                <select
-                  value={newCategory}
-                  onChange={(event) =>
-                    setNewCategory(event.target.value as InventoryCategory)
-                  }
-                >
-                  <option value="food">Alimentari</option>
-                  <option value="household">Casa</option>
-                  <option value="other">Altro</option>
-                </select>
-              </label>
-              <label className="field-label">
-                Formato <span className="optional-mark">facoltativo</span>
-                <input
-                  maxLength={120}
-                  value={formatLabel}
-                  onChange={(event) => setFormatLabel(event.target.value)}
-                  placeholder={
-                    newKind === 'packaged'
-                      ? 'Es. Pacco da 500 g'
-                      : newKind === 'piece'
-                        ? 'Es. Singolo'
-                        : 'Es. Sfuso'
-                  }
-                />
-              </label>
-              <label className="field-label">
-                Codice a barre{' '}
-                <span className="optional-mark">facoltativo</span>
-                <input
-                  inputMode="numeric"
-                  autoComplete="off"
-                  value={barcode}
-                  onChange={(event) =>
-                    setBarcode(event.target.value.replace(/\D/g, ''))
-                  }
-                  placeholder="Puoi aggiungerlo dopo"
-                />
-              </label>
-              <label className="field-label">
-                Quantità nel formato{' '}
-                <span className="optional-mark">facoltativa</span>
-                <input
-                  inputMode="decimal"
-                  value={sizeQuantity}
-                  onChange={(event) => setSizeQuantity(event.target.value)}
-                  placeholder="Es. 500"
-                />
-              </label>
-              <label className="field-label">
-                Unità del formato
-                <select
-                  value={sizeUnit}
-                  onChange={(event) => {
-                    const unit = event.target.value
-                    setSizeUnit(unit)
-                    if (
-                      newAvailability === 'measure' &&
-                      ['g', 'kg', 'ml', 'l'].includes(unit)
-                    )
-                      setNewUnit(unit as StockUnit)
-                    if (newAvailability === 'level' && newKind === 'packaged')
-                      setNewPackageState('open')
-                  }}
-                >
-                  <option value="">Nessuna</option>
-                  <option value="g">g</option>
-                  <option value="kg">kg</option>
-                  <option value="ml">ml</option>
-                  <option value="l">l</option>
-                  <option value="piece">pezzi</option>
-                </select>
               </label>
               <label className="field-label">
                 Disponibilità
@@ -882,6 +779,119 @@ export function StockPage() {
                   <option value="level">Indicativa</option>
                 </select>
               </label>
+            </div>
+            <details className="additional-product-details">
+              <summary>
+                Altri dettagli <span>Facoltativi</span>
+              </summary>
+              <div className="form-grid">
+                <label className="field-label">
+                  Marca <span className="optional-mark">facoltativa</span>
+                  <input
+                    maxLength={120}
+                    value={newBrand}
+                    onChange={(event) => setNewBrand(event.target.value)}
+                    placeholder="Se la ricordi"
+                  />
+                </label>
+                <label className="field-label">
+                  Tipo
+                  <select
+                    value={newKind}
+                    onChange={(event) => {
+                      const kind = event.target.value as FormatKind
+                      setNewKind(kind)
+                      if (newAvailability === 'count')
+                        setNewUnit(kind === 'packaged' ? 'pack' : 'piece')
+                      else if (kind === 'piece') setNewUnit('piece')
+                      else if (kind === 'packaged') setNewUnit('pack')
+                      else if (newUnit === 'pack' || newUnit === 'piece')
+                        setNewUnit('kg')
+                    }}
+                  >
+                    <option value="packaged">Confezionato</option>
+                    <option value="loose">Sfuso</option>
+                    <option value="piece">A pezzo</option>
+                  </select>
+                </label>
+                <label className="field-label">
+                  Categoria
+                  <select
+                    value={newCategory}
+                    onChange={(event) =>
+                      setNewCategory(event.target.value as InventoryCategory)
+                    }
+                  >
+                    <option value="food">Alimentari</option>
+                    <option value="household">Casa</option>
+                    <option value="other">Altro</option>
+                  </select>
+                </label>
+                <label className="field-label">
+                  Formato <span className="optional-mark">facoltativo</span>
+                  <input
+                    maxLength={120}
+                    value={formatLabel}
+                    onChange={(event) => setFormatLabel(event.target.value)}
+                    placeholder={
+                      newKind === 'packaged'
+                        ? 'Es. Pacco da 500 g'
+                        : newKind === 'piece'
+                          ? 'Es. Singolo'
+                          : 'Es. Sfuso'
+                    }
+                  />
+                </label>
+                <label className="field-label">
+                  Codice a barre{' '}
+                  <span className="optional-mark">facoltativo</span>
+                  <input
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={barcode}
+                    onChange={(event) =>
+                      setBarcode(event.target.value.replace(/\D/g, ''))
+                    }
+                    placeholder="Puoi aggiungerlo dopo"
+                  />
+                </label>
+                <label className="field-label">
+                  Quantità nel formato{' '}
+                  <span className="optional-mark">facoltativa</span>
+                  <input
+                    inputMode="decimal"
+                    value={sizeQuantity}
+                    onChange={(event) => setSizeQuantity(event.target.value)}
+                    placeholder="Es. 500"
+                  />
+                </label>
+                <label className="field-label">
+                  Unità del formato
+                  <select
+                    value={sizeUnit}
+                    onChange={(event) => {
+                      const unit = event.target.value
+                      setSizeUnit(unit)
+                      if (
+                        newAvailability === 'measure' &&
+                        ['g', 'kg', 'ml', 'l'].includes(unit)
+                      )
+                        setNewUnit(unit as StockUnit)
+                      if (newAvailability === 'level' && newKind === 'packaged')
+                        setNewPackageState('open')
+                    }}
+                  >
+                    <option value="">Nessuna</option>
+                    <option value="g">g</option>
+                    <option value="kg">kg</option>
+                    <option value="ml">ml</option>
+                    <option value="l">l</option>
+                    <option value="piece">pezzi</option>
+                  </select>
+                </label>
+              </div>
+            </details>
+            <div className="form-grid availability-fields">
               {newAvailability === 'count' && (
                 <>
                   <label className="field-label">
@@ -1179,6 +1189,16 @@ export function StockPage() {
                       : 'A pezzo'}
                 </span>
               </div>
+              {product.entries.length > 0 && (
+                <p
+                  className={`availability-summary ${productAvailabilitySummary(product.entries).tone}`}
+                >
+                  <span>Disponibilità complessiva</span>
+                  <strong>
+                    {productAvailabilitySummary(product.entries).label}
+                  </strong>
+                </p>
+              )}
               {product.entries.length === 0 ? (
                 <>
                   <div className="stock-entry no-entry">
@@ -1246,6 +1266,7 @@ export function StockPage() {
                   {product.entries.map((entry) => (
                     <div className="stock-entry" key={entry.id}>
                       <div className="stock-entry-main">
+                        <span className="lot-label">Singolo lotto</span>
                         <strong
                           className={
                             entry.mode === 'unknown' ? 'unknown-label' : ''

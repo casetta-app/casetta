@@ -127,6 +127,41 @@ export function isDefinitivelyEmpty(entry: StockEntry): boolean {
   )
 }
 
+export function productAvailabilitySummary(entries: StockEntry[]): {
+  label: string
+  tone: 'available' | 'empty' | 'estimated' | 'unknown'
+} {
+  const availableCount = entries.filter(
+    (entry) =>
+      entry.certainty === 'confirmed' &&
+      ((entry.mode === 'level' &&
+        (entry.level === 'available' || entry.level === 'low')) ||
+        ((entry.mode === 'count' || entry.mode === 'measure') &&
+          entry.quantity !== null &&
+          entry.quantity !== '0')),
+  ).length
+  const emptyCount = entries.filter(isDefinitivelyEmpty).length
+
+  if (availableCount > 0) {
+    const availableText = `${availableCount} ${availableCount === 1 ? 'lotto disponibile' : 'lotti disponibili'}`
+    const emptyText = emptyCount
+      ? ` · ${emptyCount} ${emptyCount === 1 ? 'esaurito' : 'esauriti'}`
+      : ''
+    return { label: `${availableText}${emptyText}`, tone: 'available' }
+  }
+
+  if (entries.length > 0 && entries.every(isDefinitivelyEmpty))
+    return { label: 'Tutti i lotti esauriti', tone: 'empty' }
+
+  if (entries.some((entry) => entry.certainty === 'estimated'))
+    return { label: 'Disponibilità stimata', tone: 'estimated' }
+
+  if (emptyCount > 0)
+    return { label: 'Altri lotti da verificare', tone: 'unknown' }
+
+  return { label: 'Disponibilità da verificare', tone: 'unknown' }
+}
+
 export function matchesAvailability(
   entries: StockEntry[],
   filter: AvailabilityFilter,
