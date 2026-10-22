@@ -1,8 +1,10 @@
+import { recognizeProduct } from '../recognition/api'
+import { ProposalEditor } from '../recognition/ProposalEditor'
+import type { OffResult } from '../../supabase/functions/_shared/off'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   attachCatalogFormat,
-  findBarcodeFormats,
   inventoryErrorMessage,
   type BarcodeMatch,
 } from '../inventory/api'
@@ -38,6 +40,7 @@ export function BarcodeScanner({
   const [matches, setMatches] = useState<BarcodeMatch[]>([])
   const [busy, setBusy] = useState(false)
   const [resolved, setResolved] = useState(false)
+  const [external, setExternal] = useState<OffResult | null>(null)
 
   function stop() {
     generation.current++
@@ -99,14 +102,38 @@ export function BarcodeScanner({
     setLookupState('searching')
     if (dialog.current) dialog.current.scrollTop = 0
     setResolved(false)
+    setExternal(null)
     setBusy(true)
     setMessage('Codice riconosciuto. Cerco nel catalogo…')
     try {
-      const found = await findBarcodeFormats(
-        homeId,
-        barcodeVariants(normalized),
-      )
+      const result = await recognizeProduct(homeId, normalized)
       if (!alive.current) return
+      if (result.status !== 'local') {
+        setExternal(result)
+        setMatches([])
+        setLookupState(
+          result.status === 'found' || result.status === 'incomplete'
+            ? 'external'
+            : result.status === 'absent'
+              ? 'absent'
+              : 'external-error',
+        )
+        setMessage(
+          {
+            absent: 'Barcode assente anche da Open Food Facts.',
+            unavailable: 'Servizio esterno temporaneamente non disponibile.',
+            network: 'Errore di rete verso la fonte esterna.',
+            timeout: 'Tempo scaduto nella ricerca esterna.',
+            limited: 'Limite richieste raggiunto. Attendi e riprova.',
+            found: 'Proposta Open Food Facts da confermare.',
+            incomplete:
+              'Dati Open Food Facts incompleti: completa la proposta.',
+          }[result.status],
+        )
+        setResolved(true)
+        return
+      }
+      const found = result.matches
       setLookupState(
         found.length > 1 ? 'ambiguous' : found.length ? 'found' : 'absent',
       )
@@ -159,6 +186,7 @@ export function BarcodeScanner({
     locked.current = false
     setCode('')
     setLookupState('idle')
+    setExternal(null)
     setOperationError('')
     setMatches([])
     setResolved(false)
@@ -210,6 +238,14 @@ export function BarcodeScanner({
           aria-live="polite"
         >
           {code && <strong>Codice letto: {code}</strong>}
+          {external &&
+            (external.status === 'found' ||
+              external.status === 'incomplete') && (
+              <p>
+                {external.proposal.name || 'Nome da completare'} ·{' '}
+                {external.proposal.brand || 'Marca non disponibile'}
+              </p>
+            )}
           {operationError && <p role="alert">{operationError}</p>}
           <p>
             {lookupState === 'found'
@@ -276,7 +312,7 @@ export function BarcodeScanner({
         </details>
         {code && (
           <>
-            {lookupState === 'error' && (
+            {['error', 'external-error'].includes(lookupState) && (
               <>
                 <p role="alert">{message}</p>
                 <button
@@ -308,6 +344,33 @@ export function BarcodeScanner({
                   </button>
                 </div>
               ))}
+            {external &&
+              (external.status === 'found' ||
+                external.status === 'incomplete') && (
+                <ProposalEditor
+                  key={code}
+                  proposal={{ ...external.proposal, barcode: code }}
+                  homeId={homeId}
+                  busy={busy}
+                  onBusy={(value) => {
+                    if (alive.current) setBusy(value)
+                  }}
+                  onError={(error) => {
+                    if (alive.current)
+                      setOperationError(inventoryErrorMessage(error))
+                  }}
+                  onDone={async () => {
+                    if (!alive.current) return
+                    await onAdded()
+                    if (alive.current) {
+                      next()
+                      setMessage(
+                        'Prodotto confermato. Pronto per il prossimo codice.',
+                      )
+                    }
+                  }}
+                />
+              )}
             {resolved && matches.length === 0 && (
               <button
                 type="button"

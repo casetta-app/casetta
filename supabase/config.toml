@@ -1,0 +1,2 @@
+[functions.food-facts]
+verify_jwt = true

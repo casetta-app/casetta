@@ -65,7 +65,7 @@ with tempfile.TemporaryDirectory(prefix='casetta-m0b-') as directory:
         assert sql('select (select count(*) from public.products) + (select count(*) from public.storage_locations) + (select count(*) from public.stock_entries);').stdout.strip() == '0'
         print('PASS: M1 non crea catalogo, posizioni o scorte dimostrative', flush=True)
         sql(f"begin; set local role authenticated; select set_config('request.jwt.claim.sub','{preserved_user}',true); select public.delete_home('{preserved_home}'); reset role; delete from auth.users where id='{preserved_user}'; commit;")
-        for test_file in ['database.sql', 'lifecycle.sql', 'inventory.sql', 'atomic-addition.sql']:
+        for test_file in ['database.sql', 'lifecycle.sql', 'inventory.sql', 'atomic-addition.sql', 'food-facts.sql']:
             result = sql((ROOT / 'tests' / test_file).read_text())
             total_checks += result.stderr.count('PASS:')
             if '--verbose' in sys.argv: print(result.stderr.strip(), flush=True)

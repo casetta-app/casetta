@@ -30,6 +30,7 @@ export type InventoryProduct = {
   alias: string | null
   formatLabel: string
   formatKind: FormatKind
+  sourceRef?: string | null
   formatSizeUnit: string | null
   entries: StockEntry[]
 }

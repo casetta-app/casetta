@@ -1215,6 +1215,22 @@ export function StockPage() {
                     {product.brand ? `${product.brand} · ` : ''}
                     {product.formatLabel}
                   </p>
+                  {product.sourceRef && (
+                    <p>
+                      Fonte:{' '}
+                      <a
+                        href={product.sourceRef}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open Food Facts
+                      </a>{' '}
+                      ·{' '}
+                      <a href="https://opendatacommons.org/licenses/odbl/1-0/">
+                        ODbL
+                      </a>
+                    </p>
+                  )}
                 </div>
                 <span className={`format-badge format-${product.formatKind}`}>
                   {product.formatKind === 'packaged'

@@ -1,5 +1,6 @@
 -- SOLO database PostgreSQL locale usa e getta. Non applicare su Supabase.
 create role anon nologin;
+create role service_role nologin;
 create role authenticated nologin;
 create schema auth;
 create table auth.users(id uuid primary key);

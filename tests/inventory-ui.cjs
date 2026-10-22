@@ -75,6 +75,7 @@ class Query {
 }
 const session = { user: { id: 'user-a', email: 'person@example.invalid' }, access_token: 'mock', refresh_token: 'mock', expires_at: 9999999999, token_type: 'bearer' };
 export const supabase = {
+  functions: { async invoke() { window.__offCalls=(window.__offCalls||0)+1; return {data:window.__offResponse || {status:'absent'},error:null} } },
   auth: {
     onAuthStateChange(callback) { queueMicrotask(() => callback('INITIAL_SESSION', session)); return { data: { subscription: { unsubscribe() {} } } }; },
     async getSession() { return { data: { session }, error: null }; },
@@ -594,6 +595,60 @@ async function openOtherActions(card) {
     console.log(
       'PASS: UI owner/editor, form richiudibile, campi essenziali e facoltativi, aggiunta senza barcode e quantità, catalogo, movimenti, cambio casa, layout mobile/desktop e link Oggi → Scorte',
     )
+    await page.evaluate(() => {
+      window.__offResponse = {
+        status: 'found',
+        proposal: {
+          name: 'Pasta OFF',
+          brand: 'Marca suggerita',
+          label: '500 g',
+          quantity: '500',
+          unit: 'g',
+          barcode: '96385074',
+          sourceRef: 'https://world.openfoodfacts.org/product/96385074',
+        },
+      }
+    })
+    const beforeOff = await page.evaluate(
+      () => window.__inventoryDb.movements.length,
+    )
+    await page.locator('.add-product-button').click()
+    await page.getByRole('button', { name: 'Scansiona', exact: true }).click()
+    await page.locator('.scanner-manual summary').click()
+    await page.getByLabel('Barcode manuale').fill('96385074')
+    await page
+      .getByRole('button', { name: 'Cerca codice', exact: true })
+      .click()
+    await page
+      .getByRole('heading', { name: 'Pasta OFF', exact: true })
+      .waitFor()
+    assert.equal(
+      await page.evaluate(() => window.__inventoryDb.movements.length),
+      beforeOff,
+    )
+    await page
+      .getByRole('button', { name: 'Modifica dati', exact: true })
+      .click()
+    await page.getByLabel('Nome', { exact: true }).fill('Pasta OFF corretta')
+    await page
+      .getByRole('button', { name: 'Conferma prodotto', exact: true })
+      .click()
+    await page
+      .getByText('Prodotto confermato. Pronto per il prossimo codice.')
+      .waitFor()
+    await page.getByRole('button', { name: 'Chiudi scanner' }).click()
+    await page
+      .getByRole('heading', { name: 'Pasta OFF corretta', exact: true })
+      .waitFor()
+    const imported = await page.evaluate(
+      () => window.__inventoryDb.homeProducts.at(-1).entries[0],
+    )
+    assert.equal(imported.mode, 'unknown')
+    assert.equal(imported.quantity, null)
+    await page
+      .locator('.add-panel')
+      .getByRole('button', { name: 'Chiudi', exact: true })
+      .click()
     await page.evaluate(() => {
       window.__role = 'viewer'
       window.__checkHomes()

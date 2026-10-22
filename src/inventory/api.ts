@@ -68,6 +68,7 @@ type DbHomeProductRow = {
       name: string
       brand: string | null
       category: string
+      source_ref: string | null
     }
   }
   stock_entries: DbEntryRow[] | null
@@ -97,7 +98,7 @@ export async function loadInventory(
   const { data, error } = await client()
     .from('home_products')
     .select(
-      'id, format_id, alias, product_formats!inner(id, label, kind, size_unit, products!inner(id, name, brand, category)), stock_entries(id, mode, quantity::text, unit, level, certainty, package_state, package_count, location_id, expires_on, version, storage_locations(id, name))',
+      'id, format_id, alias, product_formats!inner(id, label, kind, size_unit, products!inner(id, name, brand, category, source_ref)), stock_entries(id, mode, quantity::text, unit, level, certainty, package_state, package_count, location_id, expires_on, version, storage_locations(id, name))',
     )
     .eq('home_id', homeId)
     .order('created_at')
@@ -116,6 +117,12 @@ export async function loadInventory(
         alias: raw.alias,
         formatLabel: format.label,
         formatKind: format.kind as FormatKind,
+        sourceRef:
+          /^https:\/\/world[.]openfoodfacts[.]org\/product\/[0-9]{8,14}$/.test(
+            product.source_ref ?? '',
+          )
+            ? product.source_ref
+            : null,
         formatSizeUnit: format.size_unit,
         entries: (raw.stock_entries ?? []).map(normalizeEntry),
       },
@@ -343,6 +350,7 @@ export type CreateProductInput = {
   sizeQuantity: string
   sizeUnit: string
   initialState: InventoryState
+  sourceRef?: string
 }
 
 export async function createHomeProduct(
@@ -352,6 +360,9 @@ export async function createHomeProduct(
   const result = await addAtomically(homeId, {
     p_format_id: null,
     p_product: {
+      ...(input.sourceRef
+        ? { source: 'external', source_ref: input.sourceRef }
+        : {}),
       name: input.name.trim(),
       brand: input.brand.trim() || null,
       category: input.category,
