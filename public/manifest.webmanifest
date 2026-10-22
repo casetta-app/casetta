@@ -1,0 +1,26 @@
+{
+  "name": "Casetta — gestione domestica",
+  "short_name": "Casetta",
+  "description": "La gestione domestica semplice e condivisa.",
+  "lang": "it",
+  "start_url": "/casetta/",
+  "scope": "/casetta/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#f7f6f2",
+  "background_color": "#f7f6f2",
+  "icons": [
+    {
+      "src": "/casetta/icons/casetta.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/casetta/icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
