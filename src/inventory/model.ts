@@ -127,6 +127,31 @@ export function isDefinitivelyEmpty(entry: StockEntry): boolean {
   )
 }
 
+export function sortEntriesForDisplay(entries: StockEntry[]): StockEntry[] {
+  const priority = (entry: StockEntry) => {
+    if (isDefinitivelyEmpty(entry)) return 2
+    if (
+      entry.certainty === 'confirmed' &&
+      ((entry.mode === 'level' &&
+        (entry.level === 'available' || entry.level === 'low')) ||
+        ((entry.mode === 'count' || entry.mode === 'measure') &&
+          entry.quantity !== null &&
+          entry.quantity !== '0'))
+    )
+      return 0
+    return 1
+  }
+
+  return entries
+    .map((entry, index) => ({ entry, index }))
+    .sort((left, right) => {
+      return (
+        priority(left.entry) - priority(right.entry) || left.index - right.index
+      )
+    })
+    .map(({ entry }) => entry)
+}
+
 export function productAvailabilitySummary(entries: StockEntry[]): {
   label: string
   tone: 'available' | 'empty' | 'estimated' | 'unknown'

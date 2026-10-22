@@ -43,25 +43,23 @@ export function AppShell() {
             <span className="home-active-name">
               {loading ? 'Verifica…' : (activeHome?.name ?? 'Nessuna casa')}
             </span>
-            <select
-              aria-label="Abitazione attiva"
-              value={loading ? '' : (activeHome?.id ?? '')}
-              disabled={loading || homes.length === 0}
-              onChange={(e) => selectHome(e.target.value)}
-            >
-              {(loading || !activeHome) && (
-                <option value="">
-                  {loading ? 'Verifica…' : 'Nessuna casa'}
-                </option>
-              )}
-              {!loading &&
-                homes.map((home) => (
-                  <option key={home.id} value={home.id}>
-                    {home.name}
-                  </option>
-                ))}
-            </select>
           </span>
+          <select
+            aria-label="Cambia abitazione"
+            value={loading ? '' : (activeHome?.id ?? '')}
+            disabled={loading || homes.length === 0}
+            onChange={(e) => selectHome(e.target.value)}
+          >
+            {(loading || !activeHome) && (
+              <option value="">{loading ? 'Verifica…' : 'Nessuna casa'}</option>
+            )}
+            {!loading &&
+              homes.map((home) => (
+                <option key={home.id} value={home.id}>
+                  {home.name}
+                </option>
+              ))}
+          </select>
           {activeHome && (
             <span className="home-role">
               {roleLabels[activeHome.access.role]}

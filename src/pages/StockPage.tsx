@@ -23,6 +23,8 @@ import {
   newMeasureState,
   newUnknownState,
   productAvailabilitySummary,
+  isDefinitivelyEmpty,
+  sortEntriesForDisplay,
   stateLabel,
   unitLabel,
   validateQuantity,
@@ -1263,8 +1265,11 @@ export function StockPage() {
                 </>
               ) : (
                 <div className="stock-entries">
-                  {product.entries.map((entry) => (
-                    <div className="stock-entry" key={entry.id}>
+                  {sortEntriesForDisplay(product.entries).map((entry) => (
+                    <div
+                      className={`stock-entry${isDefinitivelyEmpty(entry) ? ' stock-entry-empty' : ''}`}
+                      key={entry.id}
+                    >
                       <div className="stock-entry-main">
                         <span className="lot-label">Singolo lotto</span>
                         <strong
@@ -1442,48 +1447,6 @@ export function StockPage() {
                               </button>
                             </>
                           )}
-                          {(entry.mode === 'count' ||
-                            entry.mode === 'measure') &&
-                            entry.certainty === 'confirmed' &&
-                            entry.unit &&
-                            entry.quantity &&
-                            entry.quantity !== '0' && (
-                              <button
-                                type="button"
-                                className="quick-button"
-                                disabled={Boolean(busy)}
-                                onClick={() =>
-                                  void performMovement(
-                                    product.id,
-                                    entry.id,
-                                    {
-                                      p_kind: 'consume',
-                                      p_amount: entry.quantity,
-                                      p_unit: entry.unit,
-                                    },
-                                    'Scorta segnata come finita.',
-                                  )
-                                }
-                              >
-                                Finito
-                              </button>
-                            )}
-                          {entry.mode === 'count' &&
-                            entry.unit === 'pack' &&
-                            entry.package_state === 'sealed' &&
-                            entry.certainty === 'confirmed' &&
-                            Number(entry.quantity) > 0 && (
-                              <button
-                                type="button"
-                                className="quick-button"
-                                disabled={Boolean(busy)}
-                                onClick={() =>
-                                  openEditor(product, entry, 'open')
-                                }
-                              >
-                                Apri
-                              </button>
-                            )}
                           <button
                             type="button"
                             className="text-button"
@@ -1507,26 +1470,73 @@ export function StockPage() {
                               Consuma
                             </button>
                           )}
-                          <button
-                            type="button"
-                            className="text-button"
-                            disabled={Boolean(busy)}
-                            onClick={() =>
-                              openEditor(product, entry, 'correct')
-                            }
-                          >
-                            Correggi
-                          </button>
-                          <button
-                            type="button"
-                            className="text-button"
-                            disabled={Boolean(busy)}
-                            onClick={() =>
-                              openEditor(product, entry, 'location')
-                            }
-                          >
-                            Posizione
-                          </button>
+                          <details className="secondary-entry-actions">
+                            <summary>Altre azioni</summary>
+                            <div className="secondary-entry-actions-list">
+                              {(entry.mode === 'count' ||
+                                entry.mode === 'measure') &&
+                                entry.certainty === 'confirmed' &&
+                                entry.unit &&
+                                entry.quantity &&
+                                entry.quantity !== '0' && (
+                                  <button
+                                    type="button"
+                                    className="text-button"
+                                    disabled={Boolean(busy)}
+                                    onClick={() =>
+                                      void performMovement(
+                                        product.id,
+                                        entry.id,
+                                        {
+                                          p_kind: 'consume',
+                                          p_amount: entry.quantity,
+                                          p_unit: entry.unit,
+                                        },
+                                        'Scorta segnata come finita.',
+                                      )
+                                    }
+                                  >
+                                    Segna finito
+                                  </button>
+                                )}
+                              {entry.mode === 'count' &&
+                                entry.unit === 'pack' &&
+                                entry.package_state === 'sealed' &&
+                                entry.certainty === 'confirmed' &&
+                                Number(entry.quantity) > 0 && (
+                                  <button
+                                    type="button"
+                                    className="text-button"
+                                    disabled={Boolean(busy)}
+                                    onClick={() =>
+                                      openEditor(product, entry, 'open')
+                                    }
+                                  >
+                                    Apri
+                                  </button>
+                                )}
+                              <button
+                                type="button"
+                                className="text-button"
+                                disabled={Boolean(busy)}
+                                onClick={() =>
+                                  openEditor(product, entry, 'correct')
+                                }
+                              >
+                                Correggi
+                              </button>
+                              <button
+                                type="button"
+                                className="text-button"
+                                disabled={Boolean(busy)}
+                                onClick={() =>
+                                  openEditor(product, entry, 'location')
+                                }
+                              >
+                                Posizione
+                              </button>
+                            </div>
+                          </details>
                         </div>
                       )}
                       {editor?.productId === product.id &&

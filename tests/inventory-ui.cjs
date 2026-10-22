@@ -3,7 +3,8 @@ const assert = require('node:assert/strict')
 const { chromium } = require('playwright')
 
 const base = 'http://127.0.0.1:5173/casetta/'
-const longHomeName = 'Casa condivisa con un nome volutamente lungo per i test mobile'
+const longHomeName =
+  'Casa condivisa con un nome volutamente lungo per i test mobile'
 const mock = `
 const homes = [
   { id: 'home-a', name: '${longHomeName}' },
@@ -117,6 +118,13 @@ export const supabase = {
 };
 `
 
+async function openOtherActions(card) {
+  const actions = card.locator('.secondary-entry-actions')
+  if (!(await actions.evaluate((element) => element.open))) {
+    await actions.locator('summary').click()
+  }
+}
+
 ;(async () => {
   const browser = await chromium.launch({
     headless: true,
@@ -150,10 +158,37 @@ export const supabase = {
     await page.goto(`${base}#/scorte`)
     await page.getByRole('heading', { name: 'Scorte', exact: true }).waitFor()
     await page.getByRole('heading', { name: 'Pasta', exact: true }).waitFor()
-    assert.equal(await page.locator('.home-active-name').innerText(), longHomeName)
+    assert.equal(
+      await page.locator('.home-active-name').innerText(),
+      longHomeName,
+    )
     assert.equal(await page.locator('.home-role').isVisible(), false)
+    assert.equal(
+      await page
+        .locator('.home-switcher select')
+        .evaluate((select) => select.getBoundingClientRect().width),
+      44,
+    )
+    assert.ok(
+      await page
+        .locator('.topbar')
+        .evaluate((bar) => bar.getBoundingClientRect().height < 130),
+    )
     assert.match(await page.locator('.stock-card').innerText(), /Dispensa/)
 
+    assert.equal(
+      await page
+        .locator('.secondary-entry-actions')
+        .evaluate((details) => details.open),
+      false,
+    )
+    await page.locator('.secondary-entry-actions summary').click()
+    assert.equal(
+      await page
+        .locator('.secondary-entry-actions')
+        .evaluate((details) => details.open),
+      true,
+    )
     await page.getByRole('button', { name: 'Apri', exact: true }).click()
     await page.getByLabel('Confezioni da aprire').fill('1')
     await page.getByRole('button', { name: 'Apri confezione' }).click()
@@ -176,7 +211,9 @@ export const supabase = {
 
     await page.locator('.add-product-button').click()
     assert.equal(
-      await page.locator('.additional-product-details').evaluate((node) => node.open),
+      await page
+        .locator('.additional-product-details')
+        .evaluate((node) => node.open),
       false,
     )
     await page.getByLabel(/Nome/).waitFor()
@@ -187,7 +224,9 @@ export const supabase = {
     await page.getByLabel(/Codice a barre/).waitFor()
     await page.getByText('Altri dettagli').click()
     assert.equal(
-      await page.locator('.additional-product-details').evaluate((node) => node.open),
+      await page
+        .locator('.additional-product-details')
+        .evaluate((node) => node.open),
       false,
     )
     await page.getByLabel(/Cerca nel catalogo/).fill('Pasta')
@@ -233,6 +272,11 @@ export const supabase = {
     await page
       .locator('.stock-card')
       .filter({ hasText: 'Sapone' })
+      .locator('.secondary-entry-actions summary')
+      .click()
+    await page
+      .locator('.stock-card')
+      .filter({ hasText: 'Sapone' })
       .getByRole('button', { name: 'Correggi' })
       .click()
     await page.getByLabel('Come vuoi registrarla?').selectOption('measure')
@@ -247,6 +291,7 @@ export const supabase = {
     await page.getByText('Stimato', { exact: true }).waitFor()
 
     const soapCard = page.locator('.stock-card').filter({ hasText: 'Sapone' })
+    await openOtherActions(soapCard)
     await soapCard.getByRole('button', { name: 'Correggi' }).click()
     await page.getByLabel('Come vuoi registrarla?').selectOption('level')
     await page
@@ -271,6 +316,7 @@ export const supabase = {
     await page.getByRole('button', { name: 'Aggiorna', exact: true }).click()
     await soapCard.getByText('Finito', { exact: true }).waitFor()
 
+    await openOtherActions(soapCard)
     await soapCard
       .getByRole('button', { name: 'Posizione', exact: true })
       .click()
@@ -278,7 +324,7 @@ export const supabase = {
     await page.getByRole('button', { name: 'Salva posizione' }).click()
     await soapCard.getByText('Bagno', { exact: true }).waitFor()
 
-    await page.getByLabel('Abitazione attiva').selectOption('home-b')
+    await page.getByLabel('Cambia abitazione').selectOption('home-b')
     await page.getByRole('heading', { name: 'Sale', exact: true }).waitFor()
     assert.equal(
       await page.getByRole('heading', { name: 'Pasta', exact: true }).count(),
@@ -299,7 +345,9 @@ export const supabase = {
     await page.setViewportSize({ width: 1280, height: 900 })
     assert.equal(await page.locator('.home-role').isVisible(), true)
     assert.equal(
-      await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
+      await page.evaluate(
+        () => document.documentElement.scrollWidth > innerWidth,
+      ),
       false,
     )
     await page.goto(`${base}#/oggi`)

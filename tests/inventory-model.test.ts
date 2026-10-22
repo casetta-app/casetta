@@ -6,6 +6,7 @@ import {
   matchesAvailability,
   newUnknownState,
   productAvailabilitySummary,
+  sortEntriesForDisplay,
   stateLabel,
   validateQuantity,
   type InventoryProduct,
@@ -145,4 +146,28 @@ test('riepilogo prodotto distingue lotti esauriti e disponibili senza sommarli',
     label: 'Disponibilità da verificare',
     tone: 'unknown',
   })
+})
+
+test('lotti con quantità residua e sconosciuti precedono gli zeri confermati', () => {
+  const empty = entry({
+    id: 'zero',
+    mode: 'count',
+    quantity: '0',
+    unit: 'pack',
+    certainty: 'confirmed',
+  })
+  const unknown = entry({ id: 'unknown' })
+  const available = entry({
+    id: 'available',
+    mode: 'measure',
+    quantity: '1',
+    unit: 'kg',
+    certainty: 'confirmed',
+  })
+  assert.deepEqual(
+    sortEntriesForDisplay([empty, unknown, available]).map((item) => item.id),
+    ['available', 'unknown', 'zero'],
+  )
+  assert.equal(stateLabel(empty), 'Finito · zero confermato')
+  assert.equal(stateLabel(unknown), 'Da verificare')
 })
