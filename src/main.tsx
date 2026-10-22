@@ -1,27 +1,69 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { AppShell } from './shell/AppShell'
+import { AuthProvider } from './auth/AuthProvider'
+import { AuthPage } from './auth/AuthPage'
+import { ProtectedApp } from './auth/ProtectedApp'
+import { bootstrapAuth } from './auth/bootstrap'
+import { HomeGate } from './homes/HomeGate'
+import { ManagementPage } from './pages/ManagementPage'
 import { TodayPage } from './pages/TodayPage'
 import { ComingSoonPage } from './pages/ComingSoonPage'
 import './styles.css'
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <HashRouter>
-      <Routes>
-        <Route element={<AppShell />}>
-          <Route index element={<Navigate to="oggi" replace />} />
-          <Route path="oggi" element={<TodayPage />} />
-          <Route path="scorte" element={<ComingSoonPage area="Scorte" />} />
-          <Route path="spesa" element={<ComingSoonPage area="Spesa" />} />
-          <Route path="gestione" element={<ComingSoonPage area="Gestione" />} />
-          <Route path="*" element={<Navigate to="/oggi" replace />} />
-        </Route>
-      </Routes>
-    </HashRouter>
-  </React.StrictMode>,
-)
+async function start() {
+  const initialError = await bootstrapAuth()
+
+  ReactDOM.createRoot(document.getElementById('root')!).render(
+    <React.StrictMode>
+      <AuthProvider initialError={initialError}>
+        <HashRouter>
+          <Routes>
+            <Route path="accedi" element={<AuthPage />} />
+            <Route path="password" element={<AuthPage passwordChange />} />
+            <Route element={<ProtectedApp />}>
+              <Route index element={<Navigate to="oggi" replace />} />
+              <Route
+                path="oggi"
+                element={
+                  <HomeGate>
+                    <TodayPage />
+                  </HomeGate>
+                }
+              />
+              <Route
+                path="scorte"
+                element={
+                  <HomeGate>
+                    <ComingSoonPage area="Scorte" />
+                  </HomeGate>
+                }
+              />
+              <Route
+                path="spesa"
+                element={
+                  <HomeGate>
+                    <ComingSoonPage area="Spesa" />
+                  </HomeGate>
+                }
+              />
+              <Route
+                path="gestione"
+                element={
+                  <HomeGate requireHome={false}>
+                    <ManagementPage />
+                  </HomeGate>
+                }
+              />
+              <Route path="*" element={<Navigate to="/oggi" replace />} />
+            </Route>
+          </Routes>
+        </HashRouter>
+      </AuthProvider>
+    </React.StrictMode>,
+  )
+}
+void start()
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {

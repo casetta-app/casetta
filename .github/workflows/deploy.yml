@@ -16,6 +16,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
     permissions:
       contents: read
       pages: read
@@ -38,6 +41,12 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Validate production configuration
+        run: node scripts/check-deploy-env.mjs
+
+      - name: Frontend tests
+        run: pnpm test
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6

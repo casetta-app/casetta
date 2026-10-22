@@ -34,7 +34,7 @@ export function TodayPage() {
         </div>
         <div className="empty-copy">
           <span className="soft-label">UN INIZIO LEGGERO</span>
-          <h2>Una casa alla volta.</h2>
+          <h2>La tua casa è pronta.</h2>
           <p>
             Non serve inserire tutto quello che possiedi. Casetta prenderà forma
             insieme ai tuoi prossimi acquisti.
@@ -65,15 +65,14 @@ export function TodayPage() {
           <div>
             <h3>La casa resta tua</h3>
             <p>
-              Persone e abitazioni saranno gestite separatamente, con permessi
+              Persone e abitazioni sono gestite separatamente, con permessi
               espliciti.
             </p>
           </div>
         </article>
       </div>
       <p className="readiness-line">
-        <span className="status-dot" /> Nessun dato collegato in questa fase
-        iniziale
+        <span className="status-dot" /> Scorte e acquisti non ancora attivati
       </p>
     </section>
   )

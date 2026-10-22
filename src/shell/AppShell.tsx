@@ -1,8 +1,30 @@
+import { useAuth } from '../auth/AuthContext'
+import { useState } from 'react'
+import { useHomes } from '../homes/HomeContext'
+import { roleLabels } from '../homes/selection'
+import { supabase } from '../lib/supabase'
 import { NavLink, Outlet } from 'react-router-dom'
 import { Icon } from '../components/Icon'
 import { navigationItems } from './navigation'
 
 export function AppShell() {
+  const { error: authError } = useAuth()
+  const { homes, activeHome, loading, notice } = useHomes()
+  const { selectHome } = useHomes()
+  const [logoutError, setLogoutError] = useState('')
+  const [loggingOut, setLoggingOut] = useState(false)
+  async function logout() {
+    setLoggingOut(true)
+    setLogoutError('')
+    try {
+      const { error } = await supabase!.auth.signOut({ scope: 'local' })
+      if (error) throw error
+    } catch {
+      setLogoutError('Uscita non riuscita. Riprova.')
+    } finally {
+      setLoggingOut(false)
+    }
+  }
   return (
     <div className="app-frame">
       <header className="topbar">
@@ -12,24 +34,39 @@ export function AppShell() {
           </span>
           <span>casetta</span>
         </a>
-        <button
-          className="home-switcher"
-          type="button"
-          disabled
-          aria-label="Nessuna casa collegata"
-        >
+        <label className="home-switcher">
           <span className="home-avatar">
             <Icon name="home" size={16} />
           </span>
           <span className="home-switcher-copy">
             <span className="eyebrow">ABITAZIONE</span>
-            <span>Nessuna casa collegata</span>
+            <select
+              aria-label="Abitazione attiva"
+              value={loading ? '' : (activeHome?.id ?? '')}
+              disabled={loading || homes.length === 0}
+              onChange={(e) => selectHome(e.target.value)}
+            >
+              {(loading || !activeHome) && (
+                <option value="">
+                  {loading ? 'Verifica…' : 'Nessuna casa'}
+                </option>
+              )}
+              {!loading &&
+                homes.map((home) => (
+                  <option key={home.id} value={home.id}>
+                    {home.name} · {roleLabels[home.access.role]}
+                  </option>
+                ))}
+            </select>
           </span>
-          <Icon name="chevron" size={16} />
+        </label>
+        <button
+          className="setup-mark"
+          onClick={() => void logout()}
+          disabled={loggingOut}
+        >
+          {loggingOut ? 'Uscita…' : 'Esci'}
         </button>
-        <div className="setup-mark" aria-label="Setup iniziale">
-          M0-A
-        </div>
       </header>
 
       <div className="content-layout">
@@ -52,6 +89,9 @@ export function AppShell() {
           </div>
         </aside>
         <main id="main-content" className="main-content">
+          {authError && <p role="alert">{authError}</p>}
+          {logoutError && <p role="alert">{logoutError}</p>}
+          {notice && <p role="status">{notice}</p>}
           <Outlet />
         </main>
       </div>
