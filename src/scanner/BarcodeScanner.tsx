@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   attachCatalogFormat,
   findBarcodeFormats,
@@ -19,6 +20,9 @@ export function BarcodeScanner({
   onManual: (code: string) => void
   onAdded: () => Promise<void>
 }) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  const [lookupState, setLookupState] = useState('idle')
+  const [operationError, setOperationError] = useState('')
   const video = useRef<HTMLVideoElement>(null)
   const cleanup = useRef<() => void>(() => {})
   const generation = useRef(0)
@@ -43,6 +47,9 @@ export function BarcodeScanner({
   }
   useEffect(() => {
     alive.current = true
+    const windowElement = dialog.current!
+    const previousFocus = document.activeElement as HTMLElement | null
+    windowElement.showModal()
     const sessionGeneration = generation
     startRef.current()
     function suspend() {
@@ -61,6 +68,8 @@ export function BarcodeScanner({
     window.addEventListener('pagehide', suspend)
     return () => {
       alive.current = false
+      windowElement.close()
+      previousFocus?.focus()
       sessionGeneration.current++
       cleanup.current()
       document.removeEventListener('visibilitychange', visibility)
@@ -87,6 +96,8 @@ export function BarcodeScanner({
     seen.current.add(canonical)
     locked.current = true
     setCode(normalized)
+    setLookupState('searching')
+    if (dialog.current) dialog.current.scrollTop = 0
     setResolved(false)
     setBusy(true)
     setMessage('Codice riconosciuto. Cerco nel catalogo…')
@@ -96,6 +107,9 @@ export function BarcodeScanner({
         barcodeVariants(normalized),
       )
       if (!alive.current) return
+      setLookupState(
+        found.length > 1 ? 'ambiguous' : found.length ? 'found' : 'absent',
+      )
       setMatches(found)
       setResolved(true)
       setMessage(
@@ -104,7 +118,10 @@ export function BarcodeScanner({
           : 'Codice assente dal catalogo. Completa i dati manualmente.',
       )
     } catch (error) {
-      if (alive.current) setMessage(inventoryErrorMessage(error))
+      if (alive.current) {
+        setLookupState('error')
+        setMessage(inventoryErrorMessage(error))
+      }
     } finally {
       if (alive.current) setBusy(false)
     }
@@ -114,6 +131,7 @@ export function BarcodeScanner({
     stop()
     if (!video.current || document.hidden) return
     setRunning(true)
+    setOperationError('')
     setMessage('Avvio della fotocamera…')
     cleanup.current = startBarcodeCamera(
       video.current,
@@ -121,6 +139,7 @@ export function BarcodeScanner({
       (error) => {
         if (alive.current) {
           setRunning(false)
+          setOperationError(cameraError(error))
           setMessage(cameraError(error))
         }
       },
@@ -128,6 +147,7 @@ export function BarcodeScanner({
         if (alive.current)
           setMessage('Fotocamera attiva. Inquadra un codice alla volta.')
       },
+      () => locked.current,
     )
   }
   const recognizeRef = useRef(recognize)
@@ -138,6 +158,8 @@ export function BarcodeScanner({
   function next() {
     locked.current = false
     setCode('')
+    setLookupState('idle')
+    setOperationError('')
     setMatches([])
     setResolved(false)
     setMessage(
@@ -146,6 +168,7 @@ export function BarcodeScanner({
   }
   async function add(id: string) {
     if (busy) return
+    setOperationError('')
     setBusy(true)
     try {
       const result = await attachCatalogFormat(homeId, id)
@@ -159,100 +182,150 @@ export function BarcodeScanner({
           : 'Formato già nelle scorte: quantità invariata. Puoi leggere il prossimo codice.',
       )
     } catch (error) {
-      if (alive.current) setMessage(inventoryErrorMessage(error))
+      if (alive.current) setOperationError(inventoryErrorMessage(error))
     } finally {
       if (alive.current) setBusy(false)
     }
   }
-  return (
-    <section className="scanner-panel" aria-label="Scanner barcode">
-      <div className="panel-heading">
-        <h3>Scansiona un codice</h3>
-        <button type="button" onClick={onClose}>
-          Chiudi scanner
-        </button>
-      </div>
-      <video
-        ref={video}
-        autoPlay
-        muted
-        playsInline
-        aria-label="Anteprima fotocamera"
-      />
-      <div className="scanner-controls">
-        {!running ? (
-          <button type="button" onClick={() => void start()}>
-            Riprendi fotocamera
+  return createPortal(
+    <dialog
+      ref={dialog}
+      className="scanner-panel scanner-dialog"
+      aria-label="Scanner barcode"
+      onCancel={(event) => {
+        event.preventDefault()
+        onClose()
+      }}
+    >
+      <div className="scanner-sticky">
+        <div className="panel-heading">
+          <h2>Scansiona barcode</h2>
+          <button type="button" onClick={onClose}>
+            Chiudi scanner
           </button>
-        ) : (
-          <button type="button" onClick={stop}>
-            Arresta fotocamera
-          </button>
-        )}
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => {
-            seen.current.clear()
-            next()
-          }}
+        </div>
+        <div
+          className={`scanner-feedback scanner-${lookupState}`}
+          role="status"
+          aria-live="polite"
         >
-          Abilita nuova lettura dello stesso codice
-        </button>
+          {code && <strong>Codice letto: {code}</strong>}
+          {operationError && <p role="alert">{operationError}</p>}
+          <p>
+            {lookupState === 'found'
+              ? 'Trovato nel catalogo.'
+              : lookupState === 'ambiguous'
+                ? 'Più corrispondenze: scegli il formato.'
+                : lookupState === 'absent'
+                  ? 'Assente dal catalogo.'
+                  : lookupState === 'error'
+                    ? 'Errore di ricerca. Il prodotto non è stato dichiarato sconosciuto.'
+                    : operationError
+                      ? ''
+                      : message}
+          </p>
+        </div>
       </div>
-      <p role="status">{message}</p>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          void recognize(manual)
-        }}
-      >
-        <label>
-          Barcode manuale
-          <input
-            inputMode="numeric"
-            value={manual}
-            onChange={(e) => setManual(e.target.value)}
-            autoComplete="off"
+      <div className="scanner-body">
+        <div className="scanner-preview" aria-hidden="true">
+          <video
+            ref={video}
+            autoPlay
+            muted
+            playsInline
+            aria-label="Anteprima fotocamera"
           />
-        </label>
-        <button disabled={busy || Boolean(code)}>Cerca codice</button>
-      </form>
-      {code && (
-        <>
-          <strong>Codice letto: {code}</strong>
-          <p>La lettura non modifica le scorte.</p>
-          {resolved &&
-            matches.map((match) => (
-              <div className="scanner-match" key={match.id}>
-                <span>
-                  {match.products.name} {match.products.brand} · {match.label}
-                </span>
+          <span className="scanner-guide" />
+        </div>
+        <div className="scanner-controls">
+          {!running ? (
+            <button type="button" onClick={() => void start()}>
+              Riprendi fotocamera
+            </button>
+          ) : null}
+        </div>
+        <details className="scanner-manual">
+          <summary>Inserisci codice a mano o ripeti una lettura</summary>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              seen.current.clear()
+              next()
+            }}
+          >
+            Abilita nuova lettura dello stesso codice
+          </button>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              void recognize(manual)
+            }}
+          >
+            <label>
+              Barcode manuale
+              <input
+                inputMode="numeric"
+                value={manual}
+                onChange={(e) => setManual(e.target.value)}
+                autoComplete="off"
+              />
+            </label>
+            <button disabled={busy || Boolean(code)}>Cerca codice</button>
+          </form>
+        </details>
+        {code && (
+          <>
+            {lookupState === 'error' && (
+              <>
+                <p role="alert">{message}</p>
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => void add(match.id)}
+                  onClick={() => {
+                    seen.current.delete(barcodeVariants(code).sort().join(':'))
+                    locked.current = false
+                    void recognize(code)
+                  }}
                 >
-                  Conferma aggiunta
+                  Riprova ricerca
                 </button>
-              </div>
-            ))}
-          {resolved && matches.length === 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                stop()
-                onManual(code)
-              }}
-            >
-              Inserisci prodotto con questo barcode
+              </>
+            )}
+            <p>La lettura non modifica le scorte.</p>
+            {resolved &&
+              matches.map((match) => (
+                <div className="scanner-match" key={match.id}>
+                  <span>
+                    {match.products.name} {match.products.brand} · {match.label}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void add(match.id)}
+                  >
+                    Conferma aggiunta
+                  </button>
+                </div>
+              ))}
+            {resolved && matches.length === 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  stop()
+                  onManual(code)
+                }}
+              >
+                Inserisci prodotto con questo barcode
+              </button>
+            )}
+            <button type="button" disabled={busy} onClick={next}>
+              Prossimo codice
             </button>
-          )}
-          <button type="button" disabled={busy} onClick={next}>
-            Prossimo codice
-          </button>
-        </>
-      )}
-    </section>
+          </>
+        )}
+      </div>
+    </dialog>,
+    document.body,
   )
 }

@@ -15,6 +15,8 @@ export function barcodeVariants(code: string): string[] {
 
 export function cameraError(error: unknown): string {
   const name = error instanceof Error ? error.name : ''
+  if (name === 'DecoderError')
+    return 'Scansione interrotta: impossibile elaborare i fotogrammi. Riprendi la fotocamera oppure inserisci il codice a mano.'
   if (name === 'NotAllowedError' || name === 'SecurityError')
     return 'Accesso alla fotocamera negato. Abilitalo nelle impostazioni oppure inserisci il codice a mano.'
   if (name === 'NotReadableError')

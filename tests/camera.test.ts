@@ -11,9 +11,17 @@ function fixture(getUserMedia: () => Promise<unknown>) {
     configurable: true,
     value: { mediaDevices: { getUserMedia } },
   })
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true,
+    value: {
+      createElement: () => ({ getContext: () => ({ drawImage() {} }) }),
+    },
+  })
   const video = {
     srcObject: null,
     readyState: 2,
+    videoWidth: 1280,
+    videoHeight: 720,
     setAttribute() {},
     play: async () => {
       played++

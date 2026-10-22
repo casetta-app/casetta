@@ -1,4 +1,5 @@
 import { normalizeBarcode } from './codes.ts'
+import { createFrameDecoder } from './decoder.ts'
 
 const formats = ['ean_8', 'ean_13', 'upc_a', 'itf']
 type Detector = {
@@ -10,17 +11,34 @@ type DetectorConstructor = {
   new (options: { formats: string[] }): Detector
   getSupportedFormats(): Promise<string[]>
 }
+function deadline<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error('Timeout fotocamera/decoder')),
+      ms,
+    )
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (error) => {
+        clearTimeout(timer)
+        reject(error)
+      },
+    )
+  })
+}
 
-// Synchronous cancellation also owns permission requests that resolve after closing.
 export function startBarcodeCamera(
   video: HTMLVideoElement,
   onCode: (code: string) => void,
   onError: (error: unknown) => void,
   onReady: () => void,
+  isPaused = () => false,
 ) {
   let stopped = false
   let stream: MediaStream | undefined
-  let decoder: { stop(): void } | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
   let last = ''
   let lastTime = 0
@@ -28,7 +46,6 @@ export function startBarcodeCamera(
     if (stopped) return
     stopped = true
     clearTimeout(timer)
-    decoder?.stop()
     stream?.getTracks().forEach((track) => track.stop())
     video.pause()
     video.srcObject = null
@@ -40,45 +57,15 @@ export function startBarcodeCamera(
     }
   }
   const emit = (raw: string, itf = false) => {
-    if (stopped || (itf && raw.length !== 14)) return
+    if (stopped || isPaused() || (itf && raw.length !== 14)) return false
     const code = normalizeBarcode(raw)
-    if (!code) return
+    if (!code) return false
     const now = Date.now()
-    if (last === code && now - lastTime < 1200) return
+    if (last === code && now - lastTime < 1200) return true
     last = code
     lastTime = now
     onCode(code)
-  }
-  const fallback = async () => {
-    const [{ BrowserMultiFormatReader }, { BarcodeFormat, DecodeHintType }] =
-      await Promise.all([import('@zxing/browser'), import('@zxing/library')])
-    if (stopped) return
-    const reader = new BrowserMultiFormatReader(
-      new Map([
-        [
-          DecodeHintType.POSSIBLE_FORMATS,
-          [
-            BarcodeFormat.EAN_8,
-            BarcodeFormat.EAN_13,
-            BarcodeFormat.UPC_A,
-            BarcodeFormat.ITF,
-          ],
-        ],
-      ]),
-      { delayBetweenScanAttempts: 180, delayBetweenScanSuccess: 500 },
-    )
-    decoder = reader.scan(
-      video,
-      (result) => {
-        if (result)
-          emit(
-            result.getText(),
-            result.getBarcodeFormat() === BarcodeFormat.ITF,
-          )
-      },
-      fail,
-    )
-    if (stopped) decoder.stop()
+    return true
   }
   void (async () => {
     try {
@@ -96,13 +83,29 @@ export function startBarcodeCamera(
         stream.getTracks().forEach((track) => track.stop())
         return
       }
+      try {
+        const track = stream.getVideoTracks?.()[0]
+        const capabilities = track?.getCapabilities?.() as
+          (MediaTrackCapabilities & { focusMode?: string[] }) | undefined
+        if (capabilities?.focusMode?.includes('continuous')) {
+          // Optional enhancement: never reject a working camera if focus constraints fail.
+          void track
+            ?.applyConstraints({
+              advanced: [
+                { focusMode: 'continuous' } as MediaTrackConstraintSet,
+              ],
+            })
+            .catch(() => {})
+        }
+      } catch {
+        /* Optional focus controls must not block a working stream. */
+      }
       video.muted = true
       video.playsInline = true
       video.setAttribute('playsinline', '')
       video.srcObject = stream
-      await video.play()
+      await deadline(video.play(), 10000)
       if (stopped) return
-      onReady()
       const Native = (
         globalThis as typeof globalThis & {
           BarcodeDetector?: DetectorConstructor
@@ -110,35 +113,69 @@ export function startBarcodeCamera(
       ).BarcodeDetector
       let detector: Detector | undefined
       try {
-        const supported = await Native?.getSupportedFormats()
-        if (Native && formats.every((format) => supported?.includes(format)))
-          detector = new Native({ formats })
+        const supported = Native
+          ? await deadline(Native.getSupportedFormats(), 1500)
+          : []
+        const usable = formats.filter((format) => supported.includes(format))
+        if (Native && usable.length) detector = new Native({ formats: usable })
       } catch {
-        /* Experimental or partial native support uses ZXing. */
+        /* Experimental native API: ZXing remains available. */
       }
       if (stopped) return
-      if (!detector) {
-        await fallback()
-        return
-      }
+      let decode: Awaited<ReturnType<typeof createFrameDecoder>> | undefined
+      const canvas = document.createElement('canvas')
+      const context = canvas.getContext('2d', { willReadFrequently: true })
+      if (!context) throw new Error('Canvas non disponibile per la scansione')
+      const readyAt = Date.now()
+      onReady()
       const read = async () => {
         if (stopped) return
         try {
-          if (video.readyState >= 2) {
-            const results = await detector!.detect(video)
-            if (results.length === 1)
-              emit(results[0].rawValue, results[0].format === 'itf')
+          if (!isPaused()) {
+            if (
+              video.readyState >= 2 &&
+              video.videoWidth > 0 &&
+              video.videoHeight > 0
+            ) {
+              let found = false
+              if (detector) {
+                try {
+                  const results = await deadline(detector.detect(video), 1500)
+                  if (results.length > 1) {
+                    if (!stopped) timer = setTimeout(() => void read(), 180)
+                    return
+                  }
+                  if (results.length === 1)
+                    found = emit(
+                      results[0].rawValue,
+                      results[0].format === 'itf',
+                    )
+                } catch {
+                  detector = undefined
+                }
+              }
+              if (!found && !stopped && !isPaused()) {
+                decode ??= await deadline(createFrameDecoder(), 10000)
+                if (stopped || isPaused()) return schedule()
+                // Use intrinsic frame dimensions, never CSS dimensions or a stretched crop.
+                canvas.width = video.videoWidth
+                canvas.height = video.videoHeight
+                context.drawImage(video, 0, 0)
+                const value = decode(canvas)
+                if (value) emit(value)
+              }
+            } else if (Date.now() - readyAt > 12000)
+              throw new Error('Nessun fotogramma disponibile dalla fotocamera')
           }
-          if (!stopped) timer = setTimeout(() => void read(), 180)
+          schedule()
         } catch {
-          if (!stopped) {
-            try {
-              await fallback()
-            } catch (error) {
-              fail(error)
-            }
-          }
+          const error = new Error('Decoder/frame processing failed')
+          error.name = 'DecoderError'
+          fail(error)
         }
+      }
+      const schedule = () => {
+        if (!stopped) timer = setTimeout(() => void read(), 180)
       }
       void read()
     } catch (error) {

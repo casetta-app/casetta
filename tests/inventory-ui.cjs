@@ -67,7 +67,8 @@ class Query {
     return null;
   }
   then(resolve, reject) {
-    const result = () => ({ data: this.rows(), error: this.table === 'home_members' && window.__homeFailure ? {message: 'offline'} : null });
+    const result = () => ({ data: this.rows(), error: (this.table === 'home_members' && window.__homeFailure || this.table === 'product_formats' && window.__barcodeFailure) ? {message: 'offline'} : null });
+    if (this.table === 'product_formats' && window.__holdBarcode) return new Promise(done => { window.__releaseBarcode = () => done(result()) }).then(resolve,reject);
     if (this.table === 'home_members' && window.__holdHomes) return new Promise(done => { window.__releaseHomes = () => done(result()) }).then(resolve, reject);
     return Promise.resolve(result()).then(resolve, reject);
   }
@@ -150,10 +151,10 @@ async function openOtherActions(card) {
         externalRequests++
         return route.abort()
       }
-      if (url.pathname.includes('@zxing_browser'))
+      if (url.pathname.endsWith('/src/scanner/decoder.ts'))
         return route.fulfill({
           contentType: 'application/javascript',
-          body: `export class BrowserMultiFormatReader { scan(video, callback) { window.__decode = (text) => callback({getText: () => text, getBarcodeFormat: () => -1}); return { stop() { window.__decoderStops = (window.__decoderStops || 0) + 1 } } } }`,
+          body: `export async function createFrameDecoder() { window.__decode = text => {window.__pendingCode=text}; return () => { window.__frameReads=(window.__frameReads||0)+1; const value=window.__pendingCode; window.__pendingCode=null; return value || null } }`,
         })
       if (url.pathname.endsWith('/src/lib/supabase.ts'))
         return route.fulfill({
@@ -173,6 +174,19 @@ async function openOtherActions(card) {
         window.__videoPlays = (window.__videoPlays || 0) + 1
       }
       HTMLMediaElement.prototype.pause = function () {}
+      Object.defineProperty(HTMLMediaElement.prototype, 'readyState', {
+        configurable: true,
+        get: () => 2,
+      })
+      Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', {
+        configurable: true,
+        get: () => 1280,
+      })
+      Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', {
+        configurable: true,
+        get: () => 720,
+      })
+      HTMLCanvasElement.prototype.getContext = () => ({ drawImage() {} })
       Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', {
         configurable: true,
         get() {
@@ -224,6 +238,7 @@ async function openOtherActions(card) {
       })
     })
     await page.getByText(/Accesso alla fotocamera negato/).waitFor()
+    await page.locator('.scanner-manual summary').click()
     await page.getByLabel('Barcode manuale').fill('4006381333931')
     await page
       .getByRole('button', { name: 'Cerca codice', exact: true })
@@ -298,11 +313,40 @@ async function openOtherActions(card) {
       () => window.__inventoryDb.movements.length,
     )
     await page.evaluate(() => {
+      window.__holdBarcode = true
       window.__decode('4006381333931')
       window.__decode('4006381333931')
     })
+    await page.waitForFunction(() => Boolean(window.__releaseBarcode))
+    await page.setViewportSize({ width: 320, height: 568 })
+    const immediate = await page
+      .locator('.scanner-feedback strong')
+      .boundingBox()
+    assert.ok(
+      immediate && immediate.y >= 0 && immediate.y + immediate.height < 568,
+    )
+    const reads = await page.evaluate(() => window.__frameReads)
+    await page.waitForTimeout(400)
+    assert.equal(await page.evaluate(() => window.__frameReads), reads)
+    await page.evaluate(() => {
+      window.__holdBarcode = false
+      window.__releaseBarcode()
+    })
+    await page.setViewportSize({ width: 390, height: 844 })
     await page.waitForFunction(
       () => document.querySelectorAll('.scanner-match').length === 2,
+    )
+    const resultBounds = await page
+      .locator('.scanner-feedback strong')
+      .boundingBox()
+    assert.ok(
+      resultBounds &&
+        resultBounds.y >= 0 &&
+        resultBounds.y + resultBounds.height < 844,
+    )
+    assert.equal(
+      await page.getByRole('button', { name: 'Arresta fotocamera' }).count(),
+      0,
     )
     assert.equal(
       await page
@@ -328,16 +372,36 @@ async function openOtherActions(card) {
     await page.waitForTimeout(1300)
     await page.evaluate(() => window.__decode('4006381333931'))
     await page.getByText(/Codice già letto in questa sessione/).waitFor()
-    await page.evaluate(() => window.dispatchEvent(new Event('pagehide')))
-    assert.ok(
-      await page.evaluate(
-        () => window.__trackStops > 0 && window.__decoderStops > 0,
-      ),
+    await page.evaluate(() => {
+      window.__barcodeFailure = true
+      window.__decode('96385074')
+    })
+    await page.getByText(/Errore di ricerca. Il prodotto/).waitFor()
+    assert.equal(
+      await page
+        .getByRole('button', { name: 'Inserisci prodotto con questo barcode' })
+        .count(),
+      0,
     )
+    await page
+      .getByRole('button', { name: 'Prossimo codice', exact: true })
+      .click()
+    await page.evaluate(() => {
+      window.__barcodeFailure = false
+    })
+    await page.evaluate(() => window.dispatchEvent(new Event('pagehide')))
+    assert.ok(await page.evaluate(() => window.__trackStops > 0))
     await page.getByRole('button', { name: 'Riprendi fotocamera' }).click()
     await page.getByText(/Fotocamera attiva/).waitFor()
     const beforeHomeChange = await page.evaluate(() => window.__trackStops)
-    await page.getByLabel('Cambia abitazione').selectOption('home-b')
+    await page.getByLabel('Cambia abitazione').evaluate((select) => {
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLSelectElement.prototype,
+        'value',
+      ).set
+      setter.call(select, 'home-b')
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
     await page.getByRole('heading', { name: 'Sale', exact: true }).waitFor()
     assert.ok(
       await page.evaluate(

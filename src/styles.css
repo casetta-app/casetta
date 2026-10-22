@@ -1787,3 +1787,96 @@ body {
 .scanner-match span {
   overflow-wrap: anywhere;
 }
+
+/* Dedicated scanner window; the result and close control stay in view. */
+.scanner-dialog {
+  width: min(560px, calc(100% - 20px));
+  max-height: calc(100dvh - 24px);
+  margin: auto;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  color: var(--ink);
+  background: var(--paper);
+  border-radius: 18px;
+}
+.scanner-dialog::backdrop {
+  background: #17271f99;
+}
+.scanner-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--paper);
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.scanner-sticky .panel-heading {
+  align-items: center;
+}
+.scanner-sticky h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.scanner-sticky button {
+  flex: none;
+}
+.scanner-feedback {
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #edf2eb;
+  font-size: 13px;
+}
+.scanner-feedback strong {
+  display: block;
+  color: var(--green);
+  font-size: 18px;
+}
+.scanner-feedback p {
+  margin: 4px 0;
+}
+.scanner-found,
+.scanner-ambiguous,
+.scanner-absent {
+  border-left: 4px solid var(--green);
+}
+.scanner-error {
+  background: #f8eae6;
+}
+.scanner-body {
+  padding: 12px 14px 16px;
+}
+.scanner-preview {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #202820;
+}
+.scanner-dialog video {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+  max-height: 240px;
+  object-fit: contain;
+}
+.scanner-guide {
+  position: absolute;
+  pointer-events: none;
+  inset: 28% 8%;
+  border: 2px solid #ffffffaa;
+  border-radius: 9px;
+}
+.scanner-manual {
+  margin: 12px 0;
+}
+.scanner-manual summary {
+  min-height: 44px;
+  padding: 10px 0;
+  color: var(--green);
+  cursor: pointer;
+  font-size: 13px;
+}
+.scanner-dialog .scanner-match {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
