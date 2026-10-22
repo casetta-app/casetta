@@ -1,7 +1,7 @@
 # CASETTA — Specifica funzionale e tecnica v0.3
 
-**Data:** 21 ottobre 2026  
-**Stato:** progettazione; nessuna implementazione avviata da questa specifica.  
+**Data:** 21 ottobre 2026\
+**Stato:** progettazione; nessuna implementazione avviata da questa specifica.\
 **Novità v0.3:** percorso di primo avvio, assenza di inventario iniziale, accesso per invitati, recupero sessione e criteri UX M0. Include integralmente le decisioni della v0.2.
 
 ## 1. Visione e principi
