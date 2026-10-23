@@ -609,6 +609,7 @@ async function openOtherActions(card) {
         },
       }
     })
+    await page.setViewportSize({ width: 390, height: 844 })
     const beforeOff = await page.evaluate(
       () => window.__inventoryDb.movements.length,
     )
@@ -626,6 +627,32 @@ async function openOtherActions(card) {
       await page.evaluate(() => window.__inventoryDb.movements.length),
       beforeOff,
     )
+    assert.equal(
+      await page
+        .getByRole('button', { name: 'Inserisci prodotto con questo barcode' })
+        .count(),
+      0,
+    )
+    assert.equal(
+      await page.locator('.scanner-preview').evaluate((el) => el.clientHeight),
+      88,
+    )
+    await page
+      .getByRole('button', { name: 'Mostra anteprima', exact: true })
+      .click()
+    assert.ok(
+      (await page
+        .locator('.scanner-preview')
+        .evaluate((el) => el.clientHeight)) >= 208,
+    )
+    await page
+      .getByRole('button', { name: 'Riduci anteprima', exact: true })
+      .click()
+    // Simulate a stopped preview before saving: next must recover it automatically.
+    await page.locator('.scanner-preview video').evaluate((video) => {
+      video.pause()
+      video.srcObject = null
+    })
     await page
       .getByRole('button', { name: 'Modifica dati', exact: true })
       .click()
@@ -633,9 +660,37 @@ async function openOtherActions(card) {
     await page
       .getByRole('button', { name: 'Conferma prodotto', exact: true })
       .click()
+    await page.getByText(/Prodotto confermato\. Fotocamera attiva/).waitFor()
+    assert.equal(
+      await page.getByRole('button', { name: 'Riprendi fotocamera' }).count(),
+      0,
+    )
+    assert.ok(
+      await page
+        .locator('.scanner-preview video')
+        .evaluate((video) => Boolean(video.srcObject)),
+    )
+    await page.evaluate(() => window.dispatchEvent(new Event('pagehide')))
+    const stoppedAfterSave = await page.evaluate(() => window.__trackStops)
     await page
-      .getByText('Prodotto confermato. Pronto per il prossimo codice.')
-      .waitFor()
+      .getByRole('button', {
+        name: 'Abilita nuova lettura dello stesso codice',
+      })
+      .click()
+    await page.waitForTimeout(300)
+    assert.equal(
+      await page.evaluate(() => window.__trackStops),
+      stoppedAfterSave,
+    )
+    assert.equal(
+      await page
+        .locator('.scanner-preview video')
+        .evaluate((video) => video.srcObject),
+      null,
+    )
+    await page.getByText(/Fotocamera sospesa/).waitFor()
+    await page.getByRole('button', { name: 'Riprendi fotocamera' }).click()
+    await page.getByText(/Fotocamera attiva/).waitFor()
     await page.getByRole('button', { name: 'Chiudi scanner' }).click()
     await page
       .getByRole('heading', { name: 'Pasta OFF corretta', exact: true })

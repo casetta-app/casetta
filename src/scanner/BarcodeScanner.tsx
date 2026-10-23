@@ -29,6 +29,9 @@ export function BarcodeScanner({
   const cleanup = useRef<() => void>(() => {})
   const generation = useRef(0)
   const alive = useRef(true)
+  const suspended = useRef(false)
+  const cameraReady = useRef(false)
+  const [expandedPreview, setExpandedPreview] = useState(false)
   const locked = useRef(false)
   const seen = useRef(new Set<string>())
   const [running, setRunning] = useState(false)
@@ -46,6 +49,7 @@ export function BarcodeScanner({
     generation.current++
     cleanup.current()
     cleanup.current = () => {}
+    cameraReady.current = false
     setRunning(false)
   }
   useEffect(() => {
@@ -56,6 +60,8 @@ export function BarcodeScanner({
     const sessionGeneration = generation
     startRef.current()
     function suspend() {
+      suspended.current = true
+      cameraReady.current = false
       generation.current++
       cleanup.current()
       cleanup.current = () => {}
@@ -154,25 +160,32 @@ export function BarcodeScanner({
     }
   }
 
-  function start() {
+  function start(confirmation = '') {
     stop()
     if (!video.current || document.hidden) return
+    suspended.current = false
+    const currentGeneration = generation.current
     setRunning(true)
     setOperationError('')
-    setMessage('Avvio della fotocamera…')
+    setMessage(`${confirmation} Avvio della fotocamera…`.trim())
     cleanup.current = startBarcodeCamera(
       video.current,
       (raw) => void recognizeRef.current(raw),
       (error) => {
-        if (alive.current) {
+        if (alive.current && generation.current === currentGeneration) {
+          cameraReady.current = false
           setRunning(false)
           setOperationError(cameraError(error))
           setMessage(cameraError(error))
         }
       },
       () => {
-        if (alive.current)
-          setMessage('Fotocamera attiva. Inquadra un codice alla volta.')
+        if (alive.current && generation.current === currentGeneration) {
+          cameraReady.current = true
+          setMessage(
+            `${confirmation} Fotocamera attiva. Inquadra un codice alla volta.`.trim(),
+          )
+        }
       },
       () => locked.current,
     )
@@ -182,7 +195,8 @@ export function BarcodeScanner({
   const startRef = useRef(start)
   startRef.current = start
 
-  function next() {
+  function next(confirmation = '') {
+    setExpandedPreview(false)
     locked.current = false
     setCode('')
     setLookupState('idle')
@@ -190,9 +204,21 @@ export function BarcodeScanner({
     setOperationError('')
     setMatches([])
     setResolved(false)
-    setMessage(
-      'Pronto per il prossimo codice. Nessuna quantità viene aggiunta dalla sola lettura.',
-    )
+    const stream = video.current?.srcObject as MediaStream | null
+    const active =
+      cameraReady.current &&
+      stream?.getTracks().some((track) => track.readyState !== 'ended')
+    if (!document.hidden && !suspended.current) {
+      if (!active || video.current?.paused) start(confirmation)
+      else
+        setMessage(
+          `${confirmation} Fotocamera attiva. Inquadra il prossimo codice.`.trim(),
+        )
+    } else {
+      setMessage(
+        `${confirmation} Fotocamera sospesa. Premi Riprendi fotocamera per continuare.`.trim(),
+      )
+    }
   }
   async function add(id: string) {
     if (busy) return
@@ -203,11 +229,10 @@ export function BarcodeScanner({
       if (!alive.current) return
       await onAdded()
       if (!alive.current) return
-      next()
-      setMessage(
+      next(
         result.created
-          ? 'Prodotto registrato con disponibilità da verificare. Puoi leggere il prossimo codice.'
-          : 'Formato già nelle scorte: quantità invariata. Puoi leggere il prossimo codice.',
+          ? 'Prodotto registrato con disponibilità da verificare.'
+          : 'Formato già nelle scorte: quantità invariata.',
       )
     } catch (error) {
       if (alive.current) setOperationError(inventoryErrorMessage(error))
@@ -263,7 +288,10 @@ export function BarcodeScanner({
         </div>
       </div>
       <div className="scanner-body">
-        <div className="scanner-preview" aria-hidden="true">
+        <div
+          className={`scanner-preview${code && !expandedPreview ? ' scanner-preview-compact' : ''}`}
+          aria-hidden="true"
+        >
           <video
             ref={video}
             autoPlay
@@ -274,6 +302,14 @@ export function BarcodeScanner({
           <span className="scanner-guide" />
         </div>
         <div className="scanner-controls">
+          {code && (
+            <button
+              type="button"
+              onClick={() => setExpandedPreview(!expandedPreview)}
+            >
+              {expandedPreview ? 'Riduci anteprima' : 'Mostra anteprima'}
+            </button>
+          )}
           {!running ? (
             <button type="button" onClick={() => void start()}>
               Riprendi fotocamera
@@ -363,26 +399,26 @@ export function BarcodeScanner({
                     if (!alive.current) return
                     await onAdded()
                     if (alive.current) {
-                      next()
-                      setMessage(
-                        'Prodotto confermato. Pronto per il prossimo codice.',
-                      )
+                      next('Prodotto confermato.')
                     }
                   }}
                 />
               )}
-            {resolved && matches.length === 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  stop()
-                  onManual(code)
-                }}
-              >
-                Inserisci prodotto con questo barcode
-              </button>
-            )}
-            <button type="button" disabled={busy} onClick={next}>
+            {resolved &&
+              matches.length === 0 &&
+              external?.status !== 'found' &&
+              external?.status !== 'incomplete' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    stop()
+                    onManual(code)
+                  }}
+                >
+                  Inserisci prodotto con questo barcode
+                </button>
+              )}
+            <button type="button" disabled={busy} onClick={() => next()}>
               Prossimo codice
             </button>
           </>
