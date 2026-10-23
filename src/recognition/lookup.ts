@@ -1,11 +1,16 @@
 import type { OffResult } from '../../supabase/functions/_shared/off.ts'
 import { canonicalCode } from '../../supabase/functions/_shared/off.ts'
+export type ExternalResult = OffResult | { status: 'editorial' }
+// A prefix identifies an editorial allocation, never the publication title.
+export const isEditorialBarcode = (code: string) => /^97[789]\d{10}$/.test(code)
 export async function localFirst<T>(
   local: () => Promise<T[]>,
   external: () => Promise<OffResult>,
-): Promise<{ status: 'local'; matches: T[] } | OffResult> {
+  code = '',
+): Promise<{ status: 'local'; matches: T[] } | ExternalResult> {
   const matches = await local()
-  return matches.length ? { status: 'local', matches } : external()
+  if (matches.length) return { status: 'local', matches }
+  return isEditorialBarcode(code) ? { status: 'editorial' } : external()
 }
 export function deduplicate<T>(
   fetcher: (home: string, code: string) => Promise<T>,

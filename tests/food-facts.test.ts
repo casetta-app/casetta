@@ -180,3 +180,36 @@ test('risposte Edge malformate non raggiungono la UI; incompleti ed equivalenze 
     'unavailable',
   )
 })
+
+test('editoriali: catalogo prioritario, nessun OFF su 977/978/979 e nessun dato inventato', async () => {
+  let calls = 0
+  const external = async () => {
+    calls++
+    return { status: 'absent' } as const
+  }
+  for (const barcode of ['9771125522005', '9780306406157', '9791090636071']) {
+    assert.deepEqual(await localFirst(async () => [], external, barcode), {
+      status: 'editorial',
+    })
+    assert.deepEqual(
+      await localFirst(async () => ['locale'], external, barcode),
+      { status: 'local', matches: ['locale'] },
+    )
+    await assert.rejects(() =>
+      localFirst(
+        async () => {
+          throw Error('rete')
+        },
+        external,
+        barcode,
+      ),
+    )
+  }
+  assert.equal(calls, 0)
+  // Other EANs do not establish a food category: external absence stays absence.
+  assert.equal(
+    (await localFirst(async () => [], external, '4006381333931')).status,
+    'absent',
+  )
+  assert.equal(calls, 1)
+})

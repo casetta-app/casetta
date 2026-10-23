@@ -1,6 +1,6 @@
 import { recognizeProduct } from '../recognition/api'
 import { ProposalEditor } from '../recognition/ProposalEditor'
-import type { OffResult } from '../../supabase/functions/_shared/off'
+import type { ExternalResult } from '../recognition/lookup'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
@@ -43,7 +43,7 @@ export function BarcodeScanner({
   const [matches, setMatches] = useState<BarcodeMatch[]>([])
   const [busy, setBusy] = useState(false)
   const [resolved, setResolved] = useState(false)
-  const [external, setExternal] = useState<OffResult | null>(null)
+  const [external, setExternal] = useState<ExternalResult | null>(null)
 
   function stop() {
     generation.current++
@@ -120,12 +120,16 @@ export function BarcodeScanner({
         setLookupState(
           result.status === 'found' || result.status === 'incomplete'
             ? 'external'
-            : result.status === 'absent'
-              ? 'absent'
-              : 'external-error',
+            : result.status === 'editorial'
+              ? 'editorial'
+              : result.status === 'absent'
+                ? 'absent'
+                : 'external-error',
         )
         setMessage(
           {
+            editorial:
+              'Codice editoriale: inserisci i dati manualmente nella categoria Altro. Open Food Facts non viene consultato.',
             absent: 'Barcode assente anche da Open Food Facts.',
             unavailable: 'Servizio esterno temporaneamente non disponibile.',
             network: 'Errore di rete verso la fonte esterna.',
@@ -257,35 +261,34 @@ export function BarcodeScanner({
             Chiudi scanner
           </button>
         </div>
-        <div
-          className={`scanner-feedback scanner-${lookupState}`}
-          role="status"
-          aria-live="polite"
-        >
-          {code && <strong>Codice letto: {code}</strong>}
-          {external &&
-            (external.status === 'found' ||
-              external.status === 'incomplete') && (
-              <p>
-                {external.proposal.name || 'Nome da completare'} ·{' '}
-                {external.proposal.brand || 'Marca non disponibile'}
-              </p>
-            )}
-          {operationError && <p role="alert">{operationError}</p>}
-          <p>
-            {lookupState === 'found'
-              ? 'Trovato nel catalogo.'
-              : lookupState === 'ambiguous'
-                ? 'Più corrispondenze: scegli il formato.'
-                : lookupState === 'absent'
-                  ? 'Assente dal catalogo.'
-                  : lookupState === 'error'
-                    ? 'Errore di ricerca. Il prodotto non è stato dichiarato sconosciuto.'
-                    : operationError
-                      ? ''
-                      : message}
-          </p>
-        </div>
+      </div>
+      <div
+        className={`scanner-feedback scanner-${lookupState}`}
+        role="status"
+        aria-live="polite"
+      >
+        {code && <strong>Codice letto: {code}</strong>}
+        {external &&
+          (external.status === 'found' || external.status === 'incomplete') && (
+            <p>
+              {external.proposal.name || 'Nome da completare'} ·{' '}
+              {external.proposal.brand || 'Marca non disponibile'}
+            </p>
+          )}
+        {operationError && <p role="alert">{operationError}</p>}
+        <p>
+          {lookupState === 'found'
+            ? 'Trovato nel catalogo.'
+            : lookupState === 'ambiguous'
+              ? 'Più corrispondenze: scegli il formato.'
+              : lookupState === 'absent'
+                ? 'Assente dal catalogo.'
+                : lookupState === 'error'
+                  ? 'Errore di ricerca. Il prodotto non è stato dichiarato sconosciuto.'
+                  : operationError
+                    ? ''
+                    : message}
+        </p>
       </div>
       <div className="scanner-body">
         <div

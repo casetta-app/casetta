@@ -1893,3 +1893,18 @@ body {
 .scanner-preview.scanner-preview-compact {
   height: 88px;
 }
+
+/* Leave room for the fixed-height scanner heading when Safari reveals a field. */
+.scanner-dialog {
+  scroll-padding-top: 100px;
+}
+.scanner-dialog > .scanner-feedback {
+  margin: 8px 14px 0;
+}
+html {
+  scroll-padding-top: 110px;
+}
+.inventory-panel label,
+.scanner-dialog label {
+  scroll-margin-top: 12px;
+}

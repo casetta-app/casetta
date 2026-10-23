@@ -687,6 +687,7 @@ export function StockPage() {
               onClose={() => setShowScanner(false)}
               onAdded={reload}
               onManual={(code) => {
+                setNewCategory('other')
                 setBarcode(code)
                 setNewName('')
                 setNewBrand('')

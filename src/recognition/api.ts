@@ -48,5 +48,6 @@ export function recognizeProduct(homeId: string, code: string) {
   return localFirst(
     () => findBarcodeFormats(homeId, barcodeVariants(code)),
     () => external(homeId, code),
+    code,
   )
 }

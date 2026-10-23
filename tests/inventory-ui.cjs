@@ -656,6 +656,20 @@ async function openOtherActions(card) {
     await page
       .getByRole('button', { name: 'Modifica dati', exact: true })
       .click()
+    await page.getByLabel('Nome', { exact: true }).evaluate((input) => {
+      input.focus()
+      input.closest('label').scrollIntoView({ block: 'start' })
+    })
+    assert.ok(
+      await page
+        .getByLabel('Nome', { exact: true })
+        .evaluate(
+          (input) =>
+            input.closest('label').getBoundingClientRect().top >=
+            document.querySelector('.scanner-sticky').getBoundingClientRect()
+              .bottom,
+        ),
+    )
     await page.getByLabel('Nome', { exact: true }).fill('Pasta OFF corretta')
     await page
       .getByRole('button', { name: 'Conferma prodotto', exact: true })
@@ -700,6 +714,41 @@ async function openOtherActions(card) {
     )
     assert.equal(imported.mode, 'unknown')
     assert.equal(imported.quantity, null)
+    await page
+      .locator('.add-panel')
+      .getByRole('button', { name: 'Chiudi', exact: true })
+      .click()
+    await page.locator('.add-product-button').click()
+    const callsBeforeEditorial = await page.evaluate(
+      () => window.__offCalls || 0,
+    )
+    await page.getByRole('button', { name: 'Scansiona', exact: true }).click()
+    await page.locator('.scanner-manual summary').click()
+    await page.getByLabel('Barcode manuale').fill('9771125522005')
+    await page
+      .getByRole('button', { name: 'Cerca codice', exact: true })
+      .click()
+    await page.getByText(/Codice editoriale:/).waitFor()
+    assert.equal(
+      await page.evaluate(() => window.__offCalls || 0),
+      callsBeforeEditorial,
+    )
+    await page
+      .getByRole('button', { name: 'Inserisci prodotto con questo barcode' })
+      .click()
+    assert.equal(
+      await page.getByLabel(/Codice a barre/).inputValue(),
+      '9771125522005',
+    )
+    assert.equal(
+      await page
+        .locator('.add-panel')
+        .getByLabel(/Categoria/)
+        .inputValue(),
+      'other',
+    )
+    assert.equal(await page.getByLabel(/Nome/).inputValue(), '')
+    assert.equal(await page.getByLabel(/Marca/).inputValue(), '')
     await page
       .locator('.add-panel')
       .getByRole('button', { name: 'Chiudi', exact: true })
