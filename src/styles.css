@@ -1908,3 +1908,65 @@ html {
 .scanner-dialog label {
   scroll-margin-top: 12px;
 }
+
+.task-page {
+  max-width: 900px;
+}
+.task-card {
+  margin: 16px 0;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper);
+  overflow-wrap: anywhere;
+}
+.task-card h2 {
+  font-size: 20px;
+  margin: 8px 0;
+}
+.task-card fieldset {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.task-card label {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+}
+.task-card input,
+.task-card select {
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+  font-size: 16px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+.task-page button {
+  min-height: 44px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+.task-actions,
+.task-toolbar,
+.task-links {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+.task-disclosure {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.task-card summary {
+  padding: 12px 0;
+  cursor: pointer;
+}
+.mobile-nav {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}

@@ -91,7 +91,7 @@ export function AppShell() {
             </NavLink>
           ))}
           <div className="side-note">
-            <span className="status-dot" /> Fondamenta in preparazione
+            <span className="status-dot" /> La casa, una cosa alla volta
           </div>
         </aside>
         <main id="main-content" className="main-content">

@@ -1,3 +1,5 @@
+> Riferimento prodotto attuale: [specifica v0.5](docs/product/CASETTA_specifica_v0.5.md), che sostituisce la roadmap precedente. R1-A aggiunge Oggi/Agenda con attività personali e domestiche, preparate per la migrazione additiva 005. Avvisi esterni non attivi. Stato, limiti e protocollo SQL: [R1-A](docs/product/R1_A_attivita_e_scadenze.md). Le indicazioni delle milestone precedenti qui sotto restano riferimenti tecnici storici.
+
 # Casetta — M1-B.1 (inserimento atomico)
 
 Account personali e abitazioni indipendenti sopra la shell M0-A esistente. React, TypeScript strict, Vite e HashRouter, base `/casetta/`. Oggi mantiene lo stato vuoto; Scorte ora consulta e aggiorna l’inventario ibrido della casa attiva. Spesa, scanner e carrello restano in preparazione. Gestione permette consultazione delle case e creazione. Secondo lo stato comunicato dall’utente, M1-A è applicata al progetto Supabase Casetta; questa UI usa schema, RLS e RPC esistenti.

@@ -7,6 +7,7 @@ import { ProtectedApp } from './auth/ProtectedApp'
 import { bootstrapAuth } from './auth/bootstrap'
 import { HomeGate } from './homes/HomeGate'
 import { ManagementPage } from './pages/ManagementPage'
+import { TasksPage } from './tasks/TasksPage'
 import { TodayPage } from './pages/TodayPage'
 import { ComingSoonPage } from './pages/ComingSoonPage'
 import { StockPage } from './pages/StockPage'
@@ -27,8 +28,16 @@ async function start() {
               <Route
                 path="oggi"
                 element={
-                  <HomeGate>
+                  <HomeGate requireHome={false}>
                     <TodayPage />
+                  </HomeGate>
+                }
+              />
+              <Route
+                path="agenda"
+                element={
+                  <HomeGate requireHome={false}>
+                    <TasksPage />
                   </HomeGate>
                 }
               />

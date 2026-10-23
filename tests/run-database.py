@@ -13,6 +13,7 @@ sys.dont_write_bytecode = True
 from concurrency import run_lifecycle_races
 from inventory_concurrency import run_inventory_races
 from addition_concurrency import run_addition_races
+from task_concurrency import run_task_races
 
 ROOT = Path(__file__).resolve().parents[1]
 BIN = Path(shutil.which('pg_ctl') or '/opt/homebrew/bin/pg_ctl').parent
@@ -65,7 +66,7 @@ with tempfile.TemporaryDirectory(prefix='casetta-m0b-') as directory:
         assert sql('select (select count(*) from public.products) + (select count(*) from public.storage_locations) + (select count(*) from public.stock_entries);').stdout.strip() == '0'
         print('PASS: M1 non crea catalogo, posizioni o scorte dimostrative', flush=True)
         sql(f"begin; set local role authenticated; select set_config('request.jwt.claim.sub','{preserved_user}',true); select public.delete_home('{preserved_home}'); reset role; delete from auth.users where id='{preserved_user}'; commit;")
-        for test_file in ['database.sql', 'lifecycle.sql', 'inventory.sql', 'atomic-addition.sql', 'food-facts.sql']:
+        for test_file in ['database.sql', 'lifecycle.sql', 'inventory.sql', 'atomic-addition.sql', 'food-facts.sql', 'tasks.sql', 'task-transitions.sql']:
             result = sql((ROOT / 'tests' / test_file).read_text())
             total_checks += result.stderr.count('PASS:')
             if '--verbose' in sys.argv: print(result.stderr.strip(), flush=True)
@@ -103,6 +104,7 @@ with tempfile.TemporaryDirectory(prefix='casetta-m0b-') as directory:
                 assert state and state.group(1) in {'23514', '42501'}, attempt.stderr
         assert sql(f"select count(*) from public.home_members where home_id = '{home}' and role = 'owner' and revoked_at is null;").stdout.strip() == '1'
         print('PASS: demozioni concorrenti preservano almeno un owner')
+        print(f'SUMMARY: {run_task_races(sql)} scenari concorrenti attività superati')
         lifecycle_races = run_lifecycle_races(sql, command, env)
         inventory_races = run_inventory_races(sql, command, env)
         addition_races = run_addition_races(sql, command, env)
